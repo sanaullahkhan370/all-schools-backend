@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema(
@@ -78,4 +79,4 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = createTenantModel('User', userSchema);

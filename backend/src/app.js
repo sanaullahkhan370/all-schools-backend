@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { notFound, errorHandler } = require('./middleware/error.middleware');
+const { selectSchoolDatabase } = require('./middleware/schoolDatabase.middleware');
 
 // Routes import karna
 const authRoutes = require('./routes/auth.routes');
@@ -26,6 +27,7 @@ const app = express();
 app.use(helmet()); // HTTP headers security ke liye
 app.use(cors()); // Cross-Origin Resource Sharing allow karne ke liye
 app.use(express.json()); // JSON body parse karne ke liye
+app.use(selectSchoolDatabase); // Har request ko us school ke database se route kare
 
 // Rate Limiting: Aik IP se 15 minutes mein sirf 100 requests
 const limiter = rateLimit({
@@ -59,7 +61,8 @@ app.use('/api/stars', starRoutes);
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'School Management System API is running...'
+    message: 'School Management System API is running...',
+    schoolCode: req.schoolCode
   });
 });
 

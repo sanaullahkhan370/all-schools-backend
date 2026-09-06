@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const teacherProfileSchema = new mongoose.Schema(
   {
@@ -30,4 +31,4 @@ teacherProfileSchema.index(
   { unique: true, partialFilterExpression: { cnic: { $type: 'string', $gt: '' } } }
 );
 
-module.exports = mongoose.model('TeacherProfile', teacherProfileSchema);
+module.exports = createTenantModel('TeacherProfile', teacherProfileSchema);

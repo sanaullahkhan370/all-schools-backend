@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const studentEnrollmentSchema = new mongoose.Schema(
   {
@@ -27,4 +28,4 @@ studentEnrollmentSchema.index(
   { unique: true, partialFilterExpression: { isCurrent: true } }
 );
 
-module.exports = mongoose.model('StudentEnrollment', studentEnrollmentSchema);
+module.exports = createTenantModel('StudentEnrollment', studentEnrollmentSchema);

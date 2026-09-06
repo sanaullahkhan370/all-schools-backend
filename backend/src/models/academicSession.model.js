@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const academicSessionSchema = new mongoose.Schema(
   {
@@ -38,4 +39,4 @@ academicSessionSchema.index(
   { unique: true, partialFilterExpression: { isCurrent: true } }
 );
 
-module.exports = mongoose.model('AcademicSession', academicSessionSchema);
+module.exports = createTenantModel('AcademicSession', academicSessionSchema);

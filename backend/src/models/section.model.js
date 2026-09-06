@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const sectionSchema = new mongoose.Schema(
   {
@@ -16,4 +17,4 @@ const sectionSchema = new mongoose.Schema(
 
 sectionSchema.index({ schoolId: 1, academicSessionId: 1, classId: 1, name: 1 }, { unique: true });
 
-module.exports = mongoose.model('Section', sectionSchema);
+module.exports = createTenantModel('Section', sectionSchema);

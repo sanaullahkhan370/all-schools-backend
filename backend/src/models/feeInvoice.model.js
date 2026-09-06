@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const feeInvoiceSchema = new mongoose.Schema({
   schoolId: { type: mongoose.Schema.Types.ObjectId, ref: 'School', required: true, index: true },
@@ -18,4 +19,4 @@ const feeInvoiceSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
 feeInvoiceSchema.index({ schoolId: 1, studentId: 1, status: 1 });
-module.exports = mongoose.model('FeeInvoice', feeInvoiceSchema);
+module.exports = createTenantModel('FeeInvoice', feeInvoiceSchema);

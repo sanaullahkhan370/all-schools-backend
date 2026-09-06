@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const subjectSchema = new mongoose.Schema(
   {
@@ -19,4 +20,4 @@ subjectSchema.index(
   { unique: true, partialFilterExpression: { code: { $type: 'string' } } }
 );
 
-module.exports = mongoose.model('Subject', subjectSchema);
+module.exports = createTenantModel('Subject', subjectSchema);

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const questionMarkSchema = new mongoose.Schema({
   questionNumber: { type: String, required: true, trim: true },
@@ -27,4 +28,4 @@ const examAnswerSheetSchema = new mongoose.Schema({
 examAnswerSheetSchema.index({ examSubjectId: 1, studentId: 1 }, { unique: true });
 examAnswerSheetSchema.index({ schoolId: 1, sheetNumber: 1 }, { unique: true });
 
-module.exports = mongoose.model('ExamAnswerSheet', examAnswerSheetSchema);
+module.exports = createTenantModel('ExamAnswerSheet', examAnswerSheetSchema);

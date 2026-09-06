@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const studentCardSchema = new mongoose.Schema(
   {
@@ -22,4 +23,4 @@ studentCardSchema.index(
   { unique: true, partialFilterExpression: { status: 'active' } }
 );
 
-module.exports = mongoose.model('StudentCard', studentCardSchema);
+module.exports = createTenantModel('StudentCard', studentCardSchema);

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const feeStructureSchema = new mongoose.Schema({
   schoolId: { type: mongoose.Schema.Types.ObjectId, ref: 'School', required: true, index: true },
@@ -13,4 +14,4 @@ const feeStructureSchema = new mongoose.Schema({
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 feeStructureSchema.index({ schoolId: 1, academicSessionId: 1, classId: 1, title: 1 }, { unique: true });
-module.exports = mongoose.model('FeeStructure', feeStructureSchema);
+module.exports = createTenantModel('FeeStructure', feeStructureSchema);

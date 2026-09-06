@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const attendanceCorrectionSchema = new mongoose.Schema({
   schoolId: { type: mongoose.Schema.Types.ObjectId, ref: 'School', required: true, index: true },
@@ -9,4 +10,4 @@ const attendanceCorrectionSchema = new mongoose.Schema({
   reason: { type: String, required: true, trim: true },
   changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
-module.exports = mongoose.model('AttendanceCorrection', attendanceCorrectionSchema);
+module.exports = createTenantModel('AttendanceCorrection', attendanceCorrectionSchema);

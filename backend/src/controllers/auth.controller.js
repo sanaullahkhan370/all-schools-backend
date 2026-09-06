@@ -31,7 +31,8 @@ const loginUser = asyncHandler(async (req, res) => {
           schoolId: user.schoolId,
           profileImage: user.profileImage,
         },
-        token: generateToken(user._id, user.role),
+        token: generateToken(user._id, user.role, req.schoolCode),
+        schoolCode: req.schoolCode,
       },
     });
   } else {

@@ -17,6 +17,12 @@ const protect = asyncHandler(async (req, res, next) => {
       // Token verify karna
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+      // Token ko kisi doosray school database mein use honay se rokna
+      if (decoded.schoolCode && decoded.schoolCode !== req.schoolCode) {
+        res.status(401);
+        throw new Error('This login token belongs to another school');
+      }
+
       // User details nikalna (baghair password ke)
       const user = await User.findById(decoded.id).select('-password');
 

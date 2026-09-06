@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const upcomingFeeSchema = new mongoose.Schema(
   {
@@ -27,4 +28,4 @@ const upcomingFeeSchema = new mongoose.Schema(
 
 upcomingFeeSchema.index({ schoolId: 1, status: 1, expectedDate: 1 });
 
-module.exports = mongoose.model('UpcomingFee', upcomingFeeSchema);
+module.exports = createTenantModel('UpcomingFee', upcomingFeeSchema);

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const schoolSchema = new mongoose.Schema(
   {
@@ -41,4 +42,4 @@ const schoolSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('School', schoolSchema);
+module.exports = createTenantModel('School', schoolSchema);

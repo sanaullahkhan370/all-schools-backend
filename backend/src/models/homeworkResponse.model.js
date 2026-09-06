@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { createTenantModel } = require('../config/tenantModels');
 
 const homeworkResponseSchema = new mongoose.Schema(
   {
@@ -25,4 +26,4 @@ homeworkResponseSchema.index(
 );
 homeworkResponseSchema.index({ schoolId: 1, teacherId: 1, respondedAt: -1 });
 
-module.exports = mongoose.model('HomeworkResponse', homeworkResponseSchema);
+module.exports = createTenantModel('HomeworkResponse', homeworkResponseSchema);

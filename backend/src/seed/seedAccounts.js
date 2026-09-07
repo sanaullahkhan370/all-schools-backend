@@ -44,8 +44,8 @@ runSeed('Accounts seed (passwords remain separate)', async () => {
   let school = await School.findOne({ email: 'demo@school.com' });
   if (!school) {
     school = await School.create({
-      name: 'City Model School Piplan',
-      address: 'Main Bazaar, Piplan, Mianwali',
+      name: process.env.SEED_SCHOOL_NAME || 'City Model School Piplan',
+      address: process.env.SEED_SCHOOL_ADDRESS || 'Main Bazaar, Piplan, Mianwali',
       phone: '0459-123456',
       email: 'demo@school.com',
       status: 'active',

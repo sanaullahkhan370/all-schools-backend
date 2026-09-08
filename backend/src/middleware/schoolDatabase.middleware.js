@@ -8,6 +8,8 @@ const databaseNameFromUri = () => {
 };
 const schoolDatabases = () => ({
   city_school: process.env.CITY_SCHOOL_DB || databaseNameFromUri(),
+  smart_school_china_scheme:
+    process.env.SMART_SCHOOL_CHINA_SCHEME_DB || 'smart_school_china_scheme',
   jinnah_school_harnoli: process.env.JINNAH_SCHOOL_DB || 'jinnah_school_harnoli',
   shining_star_school_piplan:
     process.env.SHINING_STAR_SCHOOL_DB || 'shining_star_school_piplan',

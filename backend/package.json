@@ -20,7 +20,8 @@
     "seed:upcoming-fees": "node src/seed/seedUpcomingFees.js",
     "seed:notices": "node src/seed/seedNotices.js",
     "seed:stars": "node src/seed/seedStars.js",
-    "seed:passwords": "node src/seed/seedPasswords.js"
+    "seed:passwords": "node src/seed/seedPasswords.js",
+    "seed:simple-sample": "node src/seed/seedSimpleSample.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

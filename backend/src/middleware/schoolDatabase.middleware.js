@@ -13,6 +13,8 @@ const schoolDatabases = () => ({
   jinnah_school_harnoli: process.env.JINNAH_SCHOOL_DB || 'jinnah_school_harnoli',
   shining_star_school_piplan:
     process.env.SHINING_STAR_SCHOOL_DB || 'shining_star_school_piplan',
+  school_simple_sample:
+    process.env.SCHOOL_SIMPLE_SAMPLE_DB || 'school_simple_sample',
 });
 const selectSchoolDatabase = (req, res, next) => {
   const schoolCode = String(req.get('X-School-Code') || 'city_school').trim().toLowerCase();

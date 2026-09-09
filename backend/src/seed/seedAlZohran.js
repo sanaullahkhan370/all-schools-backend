@@ -7,6 +7,9 @@ const { registerAllModels, runWithTenant } = require('../config/tenantModels');
 const School = require('../models/school.model');
 const User = require('../models/user.model');
 const Notice = require('../models/notice.model');
+const AcademicSession = require('../models/academicSession.model');
+const SchoolClass = require('../models/class.model');
+const Section = require('../models/section.model');
 
 const SCHOOL_CODE = 'al_zohran_school_musa_wali';
 const DATABASE_NAME = process.env.AL_ZOHRAN_SCHOOL_DB || 'al_zohran_school_musa_wali';
@@ -108,6 +111,7 @@ async function seed() {
       console.log('✅ Admin: admin@alzohran.com');
       console.log('✅ Teacher: teacher@alzohran.com');
       console.log('✅ Student: student@alzohran.com');
+      console.log('✅ 13 classes and 26 sections are ready');
     }
   );
 

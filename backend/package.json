@@ -21,7 +21,8 @@
     "seed:notices": "node src/seed/seedNotices.js",
     "seed:stars": "node src/seed/seedStars.js",
     "seed:passwords": "node src/seed/seedPasswords.js",
-    "seed:simple-sample": "node src/seed/seedSimpleSample.js"
+    "seed:simple-sample": "node src/seed/seedSimpleSample.js",
+    "seed:al-zohran": "node src/seed/seedAlZohran.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -15,6 +15,8 @@ const schoolDatabases = () => ({
     process.env.SHINING_STAR_SCHOOL_DB || 'shining_star_school_piplan',
   school_simple_sample:
     process.env.SCHOOL_SIMPLE_SAMPLE_DB || 'school_simple_sample',
+  al_zohran_school_musa_wali:
+    process.env.AL_ZOHRAN_SCHOOL_DB || 'al_zohran_school_musa_wali',
 });
 const selectSchoolDatabase = (req, res, next) => {
   const schoolCode = String(req.get('X-School-Code') || 'city_school').trim().toLowerCase();

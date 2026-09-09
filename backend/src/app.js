@@ -20,6 +20,7 @@ const examRoutes = require('./routes/exam.routes');
 const homeworkRoutes = require('./routes/homework.routes');
 const noticeRoutes = require('./routes/notice.routes');
 const starRoutes = require('./routes/star.routes');
+const busTrackingRoutes = require('./modules/busTracking/busTracking.routes');
 
 const app = express();
 
@@ -28,6 +29,10 @@ app.use(helmet()); // HTTP headers security ke liye
 app.use(cors()); // Cross-Origin Resource Sharing allow karne ke liye
 app.use(express.json()); // JSON body parse karne ke liye
 app.use(selectSchoolDatabase); // Har request ko us school ke database se route kare
+
+// Bus tracker ki purani API paths ko same rakha gaya hai.
+// Isay school API limiter se pehle mount kiya hai kyun ke location updates frequent hoti hain.
+app.use('/api', busTrackingRoutes);
 
 // Rate Limiting: Aik IP se 15 minutes mein sirf 100 requests
 const limiter = rateLimit({

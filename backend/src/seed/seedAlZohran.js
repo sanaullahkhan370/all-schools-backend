@@ -92,6 +92,49 @@ async function seed() {
         schoolId: school._id,
       });
 
+      const session = await AcademicSession.findOneAndUpdate(
+        { schoolId: school._id, name: '2026-2027' },
+        {
+          $set: { isCurrent: true, status: 'active' },
+          $setOnInsert: {
+            startDate: new Date('2026-04-01'),
+            endDate: new Date('2027-03-31'),
+            createdBy: admin._id,
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      await AcademicSession.updateMany(
+        { schoolId: school._id, _id: { $ne: session._id }, isCurrent: true },
+        { $set: { isCurrent: false } }
+      );
+
+      const classNames = [
+        'Play Group', 'Nursery', 'Prep', 'Grade 1', 'Grade 2',
+        'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7',
+        'Grade 8', 'Grade 9', 'Grade 10',
+      ];
+      for (let index = 0; index < classNames.length; index += 1) {
+        const schoolClass = await SchoolClass.findOneAndUpdate(
+          { schoolId: school._id, academicSessionId: session._id, name: classNames[index] },
+          { $setOnInsert: { displayOrder: index, createdBy: admin._id } },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        for (const sectionName of ['A', 'B']) {
+          await Section.findOneAndUpdate(
+            {
+              schoolId: school._id,
+              academicSessionId: session._id,
+              classId: schoolClass._id,
+              name: sectionName,
+            },
+            { $setOnInsert: { createdBy: admin._id } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        }
+      }
+
       await Notice.findOneAndUpdate(
         { schoolId: school._id, title: 'Welcome to Al Zohran School Musa Wali' },
         {

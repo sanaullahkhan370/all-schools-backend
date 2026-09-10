@@ -20,6 +20,7 @@ const examRoutes = require('./routes/exam.routes');
 const homeworkRoutes = require('./routes/homework.routes');
 const noticeRoutes = require('./routes/notice.routes');
 const starRoutes = require('./routes/star.routes');
+const mainServerRoutes = require('./modules/mainServer/mainServer.routes');
 
 const app = express();
 
@@ -28,6 +29,12 @@ app.use(helmet()); // HTTP headers security ke liye
 app.use(cors()); // Cross-Origin Resource Sharing allow karne ke liye
 app.use(express.json()); // JSON body parse karne ke liye
 app.use(selectSchoolDatabase); // Har request ko us school ke database se route kare
+
+// main_server ke existing paths Flutter app compatibility ke liye same rakhe gaye hain.
+app.use('/api', mainServerRoutes.rootRoutes);
+app.use('/api/bus', mainServerRoutes.busRoutes);
+app.use('/api/location', mainServerRoutes.locationRoutes);
+app.use('/api/payment', mainServerRoutes.paymentRoutes);
 
 // Rate Limiting: Aik IP se 15 minutes mein sirf 100 requests
 const limiter = rateLimit({

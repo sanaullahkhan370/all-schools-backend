@@ -23,6 +23,4 @@ Base path: `/api/admin/academic`
 - `GET|POST /teacher-assignments`
 - `PATCH /teacher-assignments/:id/deactivate`
 
-Run `npm run seed` to add idempotent development examples for session
-2026-2027, three terms, classes, sections, subjects and one teacher assignment.
-Do not run development seed credentials in production.
+Create academic data through the Admin APIs. Legacy demo seed files have been removed.

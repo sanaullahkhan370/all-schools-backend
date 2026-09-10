@@ -5,24 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "seed": "node src/seed/seedAll.js",
-    "seed:all": "node src/seed/seedAll.js",
-    "seed:accounts": "node src/seed/seedAccounts.js",
-    "seed:academics": "node src/seed/seedAcademics.js",
-    "seed:students": "node src/seed/seedStudents.js",
-    "seed:attendance": "node src/seed/seedAttendance.js",
-    "seed:homework": "node src/seed/seedHomework.js",
-    "seed:homework-marks": "node src/seed/seedHomeworkMarks.js",
-    "seed:homework-responses": "node src/seed/seedHomeworkResponses.js",
-    "seed:exams": "node src/seed/seedExams.js",
-    "seed:fees": "node src/seed/seedFees.js",
-    "seed:upcoming-fees": "node src/seed/seedUpcomingFees.js",
-    "seed:notices": "node src/seed/seedNotices.js",
-    "seed:stars": "node src/seed/seedStars.js",
-    "seed:passwords": "node src/seed/seedPasswords.js",
-    "seed:simple-sample": "node src/seed/seedSimpleSample.js",
-    "seed:al-zohran": "node src/seed/seedAlZohran.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

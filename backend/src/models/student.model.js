@@ -9,8 +9,10 @@ const studentSchema = new mongoose.Schema(
     fullName: { type: String, required: true, trim: true },
     fatherName: { type: String, required: true, trim: true },
     motherName: { type: String, trim: true, default: '' },
-    gender: { type: String, enum: ['male', 'female', 'other'], required: true },
-    dateOfBirth: { type: Date, required: true },
+    // Some legacy/imported ID-card sheets do not contain gender or DOB.
+    // Keep them optional for imported records; normal API creation still requires them.
+    gender: { type: String, enum: ['male', 'female', 'other', ''], default: '' },
+    dateOfBirth: { type: Date, default: null },
     bFormNumber: { type: String, trim: true, default: '' },
     phone: { type: String, trim: true, default: '' },
     alternativePhone: { type: String, trim: true, default: '' },

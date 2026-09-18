@@ -1,5 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Examination = require('../models/examination.model');
+const AcademicSession = require('../models/academicSession.model');
+const Term = require('../models/term.model');
 const ExamSubject = require('../models/examSubject.model');
 const ExamMark = require('../models/examMark.model');
 const StudentEnrollment = require('../models/studentEnrollment.model');
@@ -196,6 +198,49 @@ const submitAnswerSheetMarks = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Question marks and result submitted', data: sheet });
 });
 
+const updateExam = asyncHandler(async (req, res) => {
+  const exam = await Examination.findOne({ _id: req.params.id, schoolId: req.user.schoolId });
+  if (!exam) { res.status(404); throw new Error('Examination not found'); }
+
+  const academicSessionId = req.body.academicSessionId || exam.academicSessionId;
+  const termId = req.body.termId || exam.termId;
+  const [session, term] = await Promise.all([
+    AcademicSession.findOne({ _id: academicSessionId, schoolId: req.user.schoolId }),
+    Term.findOne({ _id: termId, schoolId: req.user.schoolId }),
+  ]);
+  if (!session || !term) {
+    res.status(400);
+    throw new Error('Valid academic session and term are required');
+  }
+  if (!term.academicSessionId.equals(session._id)) {
+    res.status(400);
+    throw new Error('Term does not belong to the selected academic session');
+  }
+
+  const startDate = req.body.startDate ? new Date(req.body.startDate) : exam.startDate;
+  const endDate = req.body.endDate ? new Date(req.body.endDate) : exam.endDate;
+  if (endDate <= startDate) {
+    res.status(400);
+    throw new Error('End date must be after start date');
+  }
+  if (startDate < term.startDate || endDate > term.endDate) {
+    res.status(400);
+    throw new Error('Examination dates must be inside the selected term dates');
+  }
+
+  const fields = ['name', 'status'];
+  for (const field of fields) {
+    if (req.body[field] !== undefined) exam[field] = req.body[field];
+  }
+  exam.academicSessionId = session._id;
+  exam.termId = term._id;
+  exam.startDate = startDate;
+  exam.endDate = endDate;
+  exam.updatedBy = req.user._id;
+  await exam.save();
+  res.json({ success: true, message: 'Examination updated', data: exam });
+});
+
 const updateExamStatus = asyncHandler(async (req, res) => {
   const allowed = ['draft', 'active', 'completed', 'published'];
   if (!allowed.includes(req.body.status)) {
@@ -353,6 +398,7 @@ module.exports = {
   listExamSubjects,
   getMarkSheet,
   saveMarks,
+  updateExam,
   updateExamStatus,
   getParentResults,
   listAnswerSheets,

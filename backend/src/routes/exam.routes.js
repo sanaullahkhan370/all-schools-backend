@@ -6,7 +6,9 @@ const router = express.Router();
 router.use(protect);
 router.route('/').get(authorize('admin'), controller.listExams).post(authorize('admin'), controller.createExam);
 router.get('/parent/results', authorize('parent'), controller.getParentResults);
-router.patch('/:id', authorize('admin'), controller.updateExam);
+router.route('/:id')
+  .patch(authorize('admin'), controller.updateExam)
+  .delete(authorize('admin'), controller.deleteExam);
 router.patch('/:id/status', authorize('admin'), controller.updateExamStatus);
 router.route('/subjects').get(authorize('admin', 'teacher'), controller.listExamSubjects).post(authorize('admin'), controller.createExamSubject);
 router.get('/subjects/:examSubjectId/sheets', authorize('admin', 'teacher'), controller.listAnswerSheets);

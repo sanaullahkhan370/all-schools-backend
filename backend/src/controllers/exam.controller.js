@@ -241,6 +241,26 @@ const updateExam = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Examination updated', data: exam });
 });
 
+const deleteExam = asyncHandler(async (req, res) => {
+  const exam = await Examination.findOne({
+    _id: req.params.id,
+    schoolId: req.user.schoolId,
+  });
+  if (!exam) {
+    res.status(404);
+    throw new Error('Examination not found');
+  }
+  if (await ExamSubject.exists({
+    schoolId: req.user.schoolId,
+    examinationId: exam._id,
+  })) {
+    res.status(409);
+    throw new Error('Examination has subject papers and cannot be deleted');
+  }
+  await exam.deleteOne();
+  res.json({ success: true, message: 'Examination deleted' });
+});
+
 const updateExamStatus = asyncHandler(async (req, res) => {
   const allowed = ['draft', 'active', 'completed', 'published'];
   if (!allowed.includes(req.body.status)) {
@@ -399,6 +419,7 @@ module.exports = {
   getMarkSheet,
   saveMarks,
   updateExam,
+  deleteExam,
   updateExamStatus,
   getParentResults,
   listAnswerSheets,

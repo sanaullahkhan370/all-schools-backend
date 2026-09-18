@@ -26,6 +26,7 @@ const findTeacher = async (req, res) => {
     _id: req.params.id,
     schoolId: req.user.schoolId,
     role: 'teacher',
+    deletedAt: null,
   });
   if (!teacher) {
     res.status(404);
@@ -76,7 +77,7 @@ const createTeacher = asyncHandler(async (req, res) => {
 });
 
 const listTeachers = asyncHandler(async (req, res) => {
-  const query = { schoolId: req.user.schoolId, role: 'teacher' };
+  const query = { schoolId: req.user.schoolId, role: 'teacher', deletedAt: null };
   if (req.query.status === 'active') query.isActive = true;
   if (req.query.status === 'inactive') query.isActive = false;
   if (req.query.search?.trim()) {
@@ -159,4 +160,30 @@ const changeTeacherStatus = asyncHandler(async (req, res) => {
   res.json({ success: true, message: `Teacher ${teacher.isActive ? 'activated' : 'deactivated'}`, data: teacher });
 });
 
-module.exports = { createTeacher, listTeachers, getTeacher, updateTeacher, changeTeacherStatus };
+const deleteTeacher = asyncHandler(async (req, res) => {
+  const teacher = await findTeacher(req, res);
+  const now = new Date();
+
+  teacher.isActive = false;
+  teacher.deletedAt = now;
+  teacher.deletedBy = req.user._id;
+  await teacher.save();
+
+  await TeacherAssignment.updateMany(
+    { schoolId: req.user.schoolId, teacherId: teacher._id, isActive: true },
+    {
+      $set: {
+        isActive: false,
+        deactivatedBy: req.user._id,
+        deactivatedAt: now,
+      },
+    }
+  );
+
+  res.json({ success: true, message: 'Teacher deleted successfully' });
+});
+
+module.exports = {
+  createTeacher, listTeachers, getTeacher, updateTeacher,
+  changeTeacherStatus, deleteTeacher,
+};

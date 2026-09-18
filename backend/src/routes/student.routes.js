@@ -7,7 +7,10 @@ const router = express.Router();
 router.use(protect, authorize('admin'));
 
 router.route('/').get(controller.listStudents).post(controller.createStudent);
-router.route('/:id').get(controller.getStudent).patch(controller.updateStudent);
+router.route('/:id')
+  .get(controller.getStudent)
+  .patch(controller.updateStudent)
+  .delete(controller.deleteStudent);
 router.patch('/:id/status', controller.changeStudentStatus);
 router.patch('/:id/enrollment', controller.changeEnrollment);
 router.post('/:id/parents', controller.linkParent);

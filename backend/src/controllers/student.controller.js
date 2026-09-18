@@ -30,7 +30,11 @@ const requireFields = (res, body, fields) => {
 };
 
 const findStudent = async (req, res) => {
-  const student = await Student.findOne({ _id: req.params.id, schoolId: req.user.schoolId });
+  const student = await Student.findOne({
+    _id: req.params.id,
+    schoolId: req.user.schoolId,
+    deletedAt: null,
+  });
   if (!student) {
     res.status(404);
     throw new Error('Student not found');
@@ -110,7 +114,7 @@ const createStudent = asyncHandler(async (req, res) => {
 const listStudents = asyncHandler(async (req, res) => {
   const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
-  const query = { schoolId: req.user.schoolId };
+  const query = { schoolId: req.user.schoolId, deletedAt: null };
 
   if (req.query.status) query.status = req.query.status;
   if (req.query.search?.trim()) {
@@ -299,8 +303,36 @@ const generateStudentCard = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, message: 'Student Card generated', data: card });
 });
 
+const deleteStudent = asyncHandler(async (req, res) => {
+  const student = await findStudent(req, res);
+  const now = new Date();
+
+  student.status = 'inactive';
+  student.deletedAt = now;
+  student.deletedBy = req.user._id;
+  student.updatedBy = req.user._id;
+  await student.save();
+
+  await Promise.all([
+    StudentEnrollment.updateMany(
+      { schoolId: req.user.schoolId, studentId: student._id, isCurrent: true },
+      { $set: { isCurrent: false, status: 'cancelled', endedBy: req.user._id, endedAt: now } }
+    ),
+    ParentStudent.updateMany(
+      { schoolId: req.user.schoolId, studentId: student._id, isActive: true },
+      { $set: { isActive: false, updatedBy: req.user._id } }
+    ),
+    StudentCard.updateMany(
+      { schoolId: req.user.schoolId, studentId: student._id, status: 'active' },
+      { $set: { status: 'revoked', revokedBy: req.user._id, revokedAt: now, revokeReason: 'Student deleted' } }
+    ),
+  ]);
+
+  res.json({ success: true, message: 'Student deleted successfully' });
+});
+
 module.exports = {
-  createStudent, listStudents, getStudent, updateStudent,
+  createStudent, listStudents, getStudent, updateStudent, deleteStudent,
   changeStudentStatus, changeEnrollment,
   linkParent, unlinkParent, generateStudentCard,
 };

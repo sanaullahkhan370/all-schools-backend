@@ -6,6 +6,9 @@ const Section = require('../models/section.model');
 const Subject = require('../models/subject.model');
 const TeacherAssignment = require('../models/teacherAssignment.model');
 const User = require('../models/user.model');
+const StudentEnrollment = require('../models/studentEnrollment.model');
+const ExamSubject = require('../models/examSubject.model');
+const Examination = require('../models/examination.model');
 
 const allowed = (source, fields) => Object.fromEntries(
   fields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]])
@@ -60,6 +63,39 @@ const updateSession = asyncHandler(async (req, res) => {
   Object.assign(session, updates, { updatedBy: req.user._id });
   await session.save();
   res.json({ success: true, message: 'Academic session updated', data: session });
+});
+
+const deleteSession = asyncHandler(async (req, res) => {
+  const session = await findOwned(
+    AcademicSession,
+    req.params.id,
+    req.user.schoolId,
+    'Academic session'
+  );
+  if (session.isCurrent) {
+    res.status(409);
+    throw new Error('Current academic session cannot be deleted');
+  }
+
+  const dependencyQuery = {
+    schoolId: req.user.schoolId,
+    academicSessionId: session._id,
+  };
+  const dependencies = await Promise.all([
+    Term.exists(dependencyQuery),
+    SchoolClass.exists(dependencyQuery),
+    Section.exists(dependencyQuery),
+    Subject.exists(dependencyQuery),
+    TeacherAssignment.exists(dependencyQuery),
+    Examination.exists(dependencyQuery),
+  ]);
+  if (dependencies.some(Boolean)) {
+    res.status(409);
+    throw new Error('Academic session is in use and cannot be deleted');
+  }
+
+  await session.deleteOne();
+  res.json({ success: true, message: 'Academic session deleted' });
 });
 
 const setCurrentSession = asyncHandler(async (req, res) => {
@@ -150,6 +186,50 @@ const listSections = asyncHandler(async (req, res) => {
   res.json({ success: true, data: records });
 });
 
+const updateSection = asyncHandler(async (req, res) => {
+  const record = await findOwned(Section, req.params.id, req.user.schoolId, 'Section');
+  const academicSessionId = req.body.academicSessionId || record.academicSessionId;
+  const classId = req.body.classId || record.classId;
+  const [session, schoolClass] = await Promise.all([
+    findOwned(AcademicSession, academicSessionId, req.user.schoolId, 'Academic session'),
+    findOwned(SchoolClass, classId, req.user.schoolId, 'Class'),
+  ]);
+  if (!schoolClass.academicSessionId.equals(session._id)) {
+    res.status(400);
+    throw new Error('Class does not belong to the selected academic session');
+  }
+  if (req.body.classTeacherId) {
+    const teacher = await User.findOne({
+      _id: req.body.classTeacherId,
+      schoolId: req.user.schoolId,
+      role: 'teacher',
+      isActive: true,
+    });
+    if (!teacher) { res.status(400); throw new Error('Valid active teacher is required'); }
+  }
+  const updates = allowed(req.body, ['academicSessionId', 'classId', 'name', 'classTeacherId']);
+  if (updates.classTeacherId === '') updates.classTeacherId = null;
+  Object.assign(record, updates, { updatedBy: req.user._id });
+  await record.save();
+  res.json({ success: true, message: 'Section updated', data: record });
+});
+
+const deleteSection = asyncHandler(async (req, res) => {
+  const record = await findOwned(Section, req.params.id, req.user.schoolId, 'Section');
+  const dependencyQuery = { schoolId: req.user.schoolId, sectionId: record._id };
+  const [assignment, enrollment, examSubject] = await Promise.all([
+    TeacherAssignment.exists(dependencyQuery),
+    StudentEnrollment.exists(dependencyQuery),
+    ExamSubject.exists(dependencyQuery),
+  ]);
+  if (assignment || enrollment || examSubject) {
+    res.status(409);
+    throw new Error('Section is in use and cannot be deleted');
+  }
+  await record.deleteOne();
+  res.json({ success: true, message: 'Section deleted' });
+});
+
 const createSubject = asyncHandler(async (req, res) => {
   requireFields(res, req.body, ['academicSessionId', 'name']);
   await findOwned(AcademicSession, req.body.academicSessionId, req.user.schoolId, 'Academic session');
@@ -166,6 +246,32 @@ const listSubjects = asyncHandler(async (req, res) => {
   if (req.query.academicSessionId) query.academicSessionId = req.query.academicSessionId;
   const records = await Subject.find(query).sort({ name: 1 });
   res.json({ success: true, data: records });
+});
+
+const updateSubject = asyncHandler(async (req, res) => {
+  const record = await findOwned(Subject, req.params.id, req.user.schoolId, 'Subject');
+  if (req.body.academicSessionId) {
+    await findOwned(AcademicSession, req.body.academicSessionId, req.user.schoolId, 'Academic session');
+  }
+  const updates = allowed(req.body, ['academicSessionId', 'name', 'code']);
+  Object.assign(record, updates, { updatedBy: req.user._id });
+  await record.save();
+  res.json({ success: true, message: 'Subject updated', data: record });
+});
+
+const deleteSubject = asyncHandler(async (req, res) => {
+  const record = await findOwned(Subject, req.params.id, req.user.schoolId, 'Subject');
+  const dependencyQuery = { schoolId: req.user.schoolId, subjectId: record._id };
+  const [assignment, examSubject] = await Promise.all([
+    TeacherAssignment.exists(dependencyQuery),
+    ExamSubject.exists(dependencyQuery),
+  ]);
+  if (assignment || examSubject) {
+    res.status(409);
+    throw new Error('Subject is in use and cannot be deleted');
+  }
+  await record.deleteOne();
+  res.json({ success: true, message: 'Subject deleted' });
 });
 
 const createTeacherAssignment = asyncHandler(async (req, res) => {
@@ -210,6 +316,51 @@ const listTeacherAssignments = asyncHandler(async (req, res) => {
   res.json({ success: true, data: records });
 });
 
+const updateTeacherAssignment = asyncHandler(async (req, res) => {
+  const record = await findOwned(TeacherAssignment, req.params.id, req.user.schoolId, 'Teacher assignment');
+  const academicSessionId = req.body.academicSessionId || record.academicSessionId;
+  const teacherId = req.body.teacherId || record.teacherId;
+  const classId = req.body.classId || record.classId;
+  const sectionId = req.body.sectionId || record.sectionId;
+  const subjectId = req.body.subjectId || record.subjectId;
+  const [session, schoolClass, section, subject, teacher] = await Promise.all([
+    findOwned(AcademicSession, academicSessionId, req.user.schoolId, 'Academic session'),
+    findOwned(SchoolClass, classId, req.user.schoolId, 'Class'),
+    findOwned(Section, sectionId, req.user.schoolId, 'Section'),
+    findOwned(Subject, subjectId, req.user.schoolId, 'Subject'),
+    User.findOne({ _id: teacherId, schoolId: req.user.schoolId, role: 'teacher', isActive: true }),
+  ]);
+  if (!teacher) { res.status(400); throw new Error('Valid active teacher is required'); }
+  const sameSession = [schoolClass, section, subject].every((item) =>
+    item.academicSessionId.equals(session._id)
+  );
+  if (!sameSession || !section.classId.equals(schoolClass._id)) {
+    res.status(400);
+    throw new Error('Session, class, section and subject must match');
+  }
+  Object.assign(record, {
+    academicSessionId: session._id,
+    teacherId: teacher._id,
+    classId: schoolClass._id,
+    sectionId: section._id,
+    subjectId: subject._id,
+    assignmentRole: req.body.assignmentRole || record.assignmentRole,
+    isActive: req.body.isActive === undefined ? record.isActive : req.body.isActive,
+  });
+  if (record.isActive) {
+    record.deactivatedBy = undefined;
+    record.deactivatedAt = undefined;
+  }
+  await record.save();
+  res.json({ success: true, message: 'Teacher assignment updated', data: record });
+});
+
+const deleteTeacherAssignment = asyncHandler(async (req, res) => {
+  const record = await findOwned(TeacherAssignment, req.params.id, req.user.schoolId, 'Teacher assignment');
+  await record.deleteOne();
+  res.json({ success: true, message: 'Teacher assignment deleted' });
+});
+
 const deactivateTeacherAssignment = asyncHandler(async (req, res) => {
   const record = await findOwned(TeacherAssignment, req.params.id, req.user.schoolId, 'Teacher assignment');
   record.isActive = false;
@@ -220,10 +371,11 @@ const deactivateTeacherAssignment = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  createSession, listSessions, updateSession, setCurrentSession,
+  createSession, listSessions, updateSession, deleteSession, setCurrentSession,
   createTerm, listTerms,
   createClass, listClasses,
-  createSection, listSections,
-  createSubject, listSubjects,
-  createTeacherAssignment, listTeacherAssignments, deactivateTeacherAssignment,
+  createSection, listSections, updateSection, deleteSection,
+  createSubject, listSubjects, updateSubject, deleteSubject,
+  createTeacherAssignment, listTeacherAssignments, updateTeacherAssignment,
+  deleteTeacherAssignment, deactivateTeacherAssignment,
 };

@@ -28,6 +28,8 @@ const studentSchema = new mongoose.Schema(
     currentEnrollmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'StudentEnrollment' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 );

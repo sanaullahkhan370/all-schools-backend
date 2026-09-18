@@ -10,6 +10,7 @@ const examinationSchema = new mongoose.Schema({
   endDate: { type: Date, required: true },
   status: { type: String, enum: ['draft', 'active', 'completed', 'published'], default: 'draft' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 examinationSchema.index({ schoolId: 1, academicSessionId: 1, termId: 1, name: 1 }, { unique: true });
 module.exports = createTenantModel('Examination', examinationSchema);

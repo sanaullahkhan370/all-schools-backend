@@ -7,7 +7,9 @@ const router = express.Router();
 router.use(protect, authorize('admin'));
 
 router.route('/sessions').get(controller.listSessions).post(controller.createSession);
-router.patch('/sessions/:id', controller.updateSession);
+router.route('/sessions/:id')
+  .patch(controller.updateSession)
+  .delete(controller.deleteSession);
 router.patch('/sessions/:id/current', controller.setCurrentSession);
 
 router.route('/terms').get(controller.listTerms).post(controller.createTerm);

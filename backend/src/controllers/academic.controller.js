@@ -8,6 +8,7 @@ const TeacherAssignment = require('../models/teacherAssignment.model');
 const User = require('../models/user.model');
 const StudentEnrollment = require('../models/studentEnrollment.model');
 const ExamSubject = require('../models/examSubject.model');
+const Examination = require('../models/examination.model');
 
 const allowed = (source, fields) => Object.fromEntries(
   fields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]])
@@ -62,6 +63,39 @@ const updateSession = asyncHandler(async (req, res) => {
   Object.assign(session, updates, { updatedBy: req.user._id });
   await session.save();
   res.json({ success: true, message: 'Academic session updated', data: session });
+});
+
+const deleteSession = asyncHandler(async (req, res) => {
+  const session = await findOwned(
+    AcademicSession,
+    req.params.id,
+    req.user.schoolId,
+    'Academic session'
+  );
+  if (session.isCurrent) {
+    res.status(409);
+    throw new Error('Current academic session cannot be deleted');
+  }
+
+  const dependencyQuery = {
+    schoolId: req.user.schoolId,
+    academicSessionId: session._id,
+  };
+  const dependencies = await Promise.all([
+    Term.exists(dependencyQuery),
+    SchoolClass.exists(dependencyQuery),
+    Section.exists(dependencyQuery),
+    Subject.exists(dependencyQuery),
+    TeacherAssignment.exists(dependencyQuery),
+    Examination.exists(dependencyQuery),
+  ]);
+  if (dependencies.some(Boolean)) {
+    res.status(409);
+    throw new Error('Academic session is in use and cannot be deleted');
+  }
+
+  await session.deleteOne();
+  res.json({ success: true, message: 'Academic session deleted' });
 });
 
 const setCurrentSession = asyncHandler(async (req, res) => {
@@ -337,7 +371,7 @@ const deactivateTeacherAssignment = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  createSession, listSessions, updateSession, setCurrentSession,
+  createSession, listSessions, updateSession, deleteSession, setCurrentSession,
   createTerm, listTerms,
   createClass, listClasses,
   createSection, listSections, updateSection, deleteSection,

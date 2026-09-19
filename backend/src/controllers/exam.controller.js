@@ -3,6 +3,7 @@ const Examination = require('../models/examination.model');
 const AcademicSession = require('../models/academicSession.model');
 const Term = require('../models/term.model');
 const ExamSubject = require('../models/examSubject.model');
+const TeacherAssignment = require('../models/teacherAssignment.model');
 const ExamMark = require('../models/examMark.model');
 const StudentEnrollment = require('../models/studentEnrollment.model');
 const ParentStudent = require('../models/parentStudent.model');
@@ -42,6 +43,95 @@ const createExamSubject = asyncHandler(async (req, res) => {
   if (!exam) { res.status(404); throw new Error('Examination not found'); }
   const data = await ExamSubject.create({ ...req.body, schoolId: req.user.schoolId, createdBy: req.user._id });
   res.status(201).json({ success: true, message: 'Exam Subject added', data });
+});
+
+const generateExamSubjects = asyncHandler(async (req, res) => {
+  const required = ['examinationId', 'classId', 'sectionId', 'examDate'];
+  if (required.some((field) => !req.body[field])) {
+    res.status(400);
+    throw new Error('Examination, Class, Section and Exam Date are required');
+  }
+
+  const maximumMarks = Number(req.body.maximumMarks ?? 100);
+  const passingMarks = Number(req.body.passingMarks ?? 40);
+  if (!Number.isFinite(maximumMarks) || maximumMarks < 1 ||
+      !Number.isFinite(passingMarks) || passingMarks < 0 ||
+      passingMarks > maximumMarks) {
+    res.status(400);
+    throw new Error('Valid maximum and passing marks are required');
+  }
+
+  const exam = await Examination.findOne({
+    _id: req.body.examinationId,
+    schoolId: req.user.schoolId,
+  });
+  if (!exam) {
+    res.status(404);
+    throw new Error('Examination not found');
+  }
+
+  const examDate = new Date(req.body.examDate);
+  if (Number.isNaN(examDate.getTime()) ||
+      examDate < exam.startDate ||
+      examDate > exam.endDate) {
+    res.status(400);
+    throw new Error('Exam Date must be inside the Examination dates');
+  }
+
+  const assignments = await TeacherAssignment.find({
+    schoolId: req.user.schoolId,
+    academicSessionId: exam.academicSessionId,
+    classId: req.body.classId,
+    sectionId: req.body.sectionId,
+    isActive: true,
+  }).sort({ assignmentRole: 1, createdAt: 1 });
+
+  if (assignments.length === 0) {
+    res.status(400);
+    throw new Error('No assigned Subjects found for this Class and Section');
+  }
+
+  const seenSubjects = new Set();
+  let createdCount = 0;
+  let skippedCount = 0;
+  for (const assignment of assignments) {
+    const subjectKey = assignment.subjectId.toString();
+    if (seenSubjects.has(subjectKey)) continue;
+    seenSubjects.add(subjectKey);
+
+    const result = await ExamSubject.updateOne(
+      {
+        schoolId: req.user.schoolId,
+        examinationId: exam._id,
+        classId: req.body.classId,
+        sectionId: req.body.sectionId,
+        subjectId: assignment.subjectId,
+      },
+      {
+        $setOnInsert: {
+          schoolId: req.user.schoolId,
+          examinationId: exam._id,
+          classId: req.body.classId,
+          sectionId: req.body.sectionId,
+          subjectId: assignment.subjectId,
+          assignedTeacherId: assignment.teacherId,
+          examDate,
+          maximumMarks,
+          passingMarks,
+          createdBy: req.user._id,
+        },
+      },
+      { upsert: true, runValidators: true }
+    );
+    if (result.upsertedCount > 0) createdCount += 1;
+    else skippedCount += 1;
+  }
+
+  res.status(201).json({
+    success: true,
+    message: `${createdCount} Subject papers generated; ${skippedCount} existing papers skipped`,
+    data: { createdCount, skippedCount },
+  });
 });
 
 const listExamSubjects = asyncHandler(async (req, res) => {
@@ -415,6 +505,7 @@ module.exports = {
   createExam,
   listExams,
   createExamSubject,
+  generateExamSubjects,
   listExamSubjects,
   getMarkSheet,
   saveMarks,

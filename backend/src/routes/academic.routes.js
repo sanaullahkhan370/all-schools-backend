@@ -13,6 +13,9 @@ router.route('/sessions/:id')
 router.patch('/sessions/:id/current', controller.setCurrentSession);
 
 router.route('/terms').get(controller.listTerms).post(controller.createTerm);
+router.route('/terms/:id')
+  .patch(controller.updateTerm)
+  .delete(controller.deleteTerm);
 router.route('/classes').get(controller.listClasses).post(controller.createClass);
 router.route('/sections').get(controller.listSections).post(controller.createSection);
 router.route('/sections/:id').patch(controller.updateSection).delete(controller.deleteSection);

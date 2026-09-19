@@ -125,10 +125,13 @@ const listStudents = asyncHandler(async (req, res) => {
     ];
   }
 
-  if (req.query.classId || req.query.sectionId || req.query.academicSessionId) {
+  if (req.query.classId || req.query.sectionId || req.query.academicSessionId || req.query.rollNumber) {
     const enrollmentQuery = { schoolId: req.user.schoolId, isCurrent: true };
     for (const field of ['classId', 'sectionId', 'academicSessionId']) {
       if (req.query[field]) enrollmentQuery[field] = req.query[field];
+    }
+    if (req.query.rollNumber?.trim()) {
+      enrollmentQuery.rollNumber = req.query.rollNumber.trim().toUpperCase();
     }
     const enrollmentIds = await StudentEnrollment.find(enrollmentQuery).distinct('_id');
     query.currentEnrollmentId = { $in: enrollmentIds };

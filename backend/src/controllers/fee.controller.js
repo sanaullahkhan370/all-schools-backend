@@ -36,6 +36,94 @@ const createInvoice = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, message: 'Fee invoice generated', data });
 });
 
+const createBulkInvoices = asyncHandler(async (req, res) => {
+  const {
+    academicSessionId,
+    classId,
+    sectionId,
+    title,
+    feeType,
+    amount,
+    dueDate,
+    billingMonth,
+  } = req.body;
+
+  if (!academicSessionId || !title?.trim() || !feeType || amount === undefined || !dueDate || !billingMonth) {
+    res.status(400);
+    throw new Error('Session, title, fee type, amount, due date and billing month are required');
+  }
+
+  const cleanAmount = Number(amount);
+  if (!Number.isFinite(cleanAmount) || cleanAmount < 0) {
+    res.status(400);
+    throw new Error('A valid fee amount is required');
+  }
+  if (!/^\d{4}-\d{2}$/.test(String(billingMonth))) {
+    res.status(400);
+    throw new Error('Billing month must use YYYY-MM format');
+  }
+
+  const enrollmentQuery = {
+    schoolId: req.user.schoolId,
+    academicSessionId,
+    isCurrent: true,
+    status: 'active',
+  };
+  if (classId) enrollmentQuery.classId = classId;
+  if (sectionId) enrollmentQuery.sectionId = sectionId;
+
+  const enrollments = await StudentEnrollment.find(enrollmentQuery).select('studentId');
+  const studentIds = [...new Set(enrollments.map((entry) => entry.studentId.toString()))];
+  if (!studentIds.length) {
+    res.status(400);
+    throw new Error('No active students found for the selected class or section');
+  }
+
+  const billingKey = `${billingMonth}:${feeType}`;
+  const existing = await FeeInvoice.find({
+    schoolId: req.user.schoolId,
+    academicSessionId,
+    studentId: { $in: studentIds },
+    billingKey,
+    status: { $ne: 'cancelled' },
+  }).select('studentId');
+  const existingIds = new Set(existing.map((invoice) => invoice.studentId.toString()));
+
+  const documents = studentIds
+    .filter((studentId) => !existingIds.has(studentId))
+    .map((studentId, index) => {
+      const invoiceNumber = `INV-${Date.now()}-${index}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      return {
+        schoolId: req.user.schoolId,
+        academicSessionId,
+        studentId,
+        invoiceNumber,
+        billingMonth,
+        billingKey,
+        items: [{ title: title.trim(), feeType, amount: cleanAmount }],
+        subtotal: cleanAmount,
+        discount: 0,
+        fine: 0,
+        totalAmount: cleanAmount,
+        remainingAmount: cleanAmount,
+        dueDate,
+        createdBy: req.user._id,
+      };
+    });
+
+  if (documents.length) await FeeInvoice.insertMany(documents);
+
+  res.status(201).json({
+    success: true,
+    message: `${documents.length} invoices generated; ${existingIds.size} existing invoices skipped`,
+    data: {
+      eligibleCount: studentIds.length,
+      createdCount: documents.length,
+      skippedCount: existingIds.size,
+    },
+  });
+});
+
 const listInvoices = asyncHandler(async (req, res) => {
   const query = { schoolId: req.user.schoolId };
   if (req.query.studentId) query.studentId = req.query.studentId;
@@ -218,6 +306,7 @@ module.exports = {
   createStructure,
   listStructures,
   createInvoice,
+  createBulkInvoices,
   listInvoices,
   recordPayment,
   listPayments,

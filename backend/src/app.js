@@ -29,10 +29,10 @@ app.use(cors()); // Cross-Origin Resource Sharing allow karne ke liye
 app.use(express.json()); // JSON body parse karne ke liye
 app.use(selectSchoolDatabase); // Har request ko us school ke database se route kare
 
-// Rate Limiting: Aik IP se 15 minutes mein sirf 100 requests
+// Rate limiting: production mein 100, local development mein 5000 requests
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'production' ? 100 : 5000,
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes'

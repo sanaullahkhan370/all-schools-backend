@@ -11,6 +11,7 @@ router.route('/:id')
   .delete(authorize('admin'), controller.deleteExam);
 router.patch('/:id/status', authorize('admin'), controller.updateExamStatus);
 router.route('/subjects').get(authorize('admin', 'teacher'), controller.listExamSubjects).post(authorize('admin'), controller.createExamSubject);
+router.post('/subjects/generate', authorize('admin'), controller.generateExamSubjects);
 router.get('/subjects/:examSubjectId/sheets', authorize('admin', 'teacher'), controller.listAnswerSheets);
 router.post('/subjects/:examSubjectId/sheets/allocate', authorize('admin', 'teacher'), controller.allocateAnswerSheet);
 router.post('/subjects/:examSubjectId/sheets/allocate-manual', authorize('admin', 'teacher'), controller.allocateAnswerSheetManually);

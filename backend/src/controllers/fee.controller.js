@@ -233,7 +233,9 @@ const deletePayment = asyncHandler(async (req, res) => {
 });
 
 const listPayments = asyncHandler(async (req, res) => {
-  const data = await FeePayment.find({ schoolId: req.user.schoolId }).populate('studentId', 'fullName admissionNumber').populate('invoiceId', 'invoiceNumber totalAmount').sort({ paidAt: -1 });
+  const query = { schoolId: req.user.schoolId };
+  if (req.query.studentId) query.studentId = req.query.studentId;
+  const data = await FeePayment.find(query).populate('studentId', 'fullName admissionNumber').populate('invoiceId', 'invoiceNumber totalAmount').sort({ paidAt: -1 });
   res.json({ success: true, data });
 });
 

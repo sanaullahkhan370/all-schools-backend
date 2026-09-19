@@ -16,10 +16,14 @@ router.post('/invoices/bulk', authorize('admin'), controller.createBulkInvoices)
 router.route('/invoices')
   .get(authorize('admin'), controller.listInvoices)
   .post(authorize('admin'), controller.createInvoice);
+router.patch('/invoices/:invoiceId', authorize('admin'), controller.updateInvoice);
 router.post(
   '/invoices/:invoiceId/payments',
   authorize('admin'),
   controller.recordPayment
 );
 router.get('/payments', authorize('admin'), controller.listPayments);
+router.route('/payments/:paymentId')
+  .patch(authorize('admin'), controller.updatePayment)
+  .delete(authorize('admin'), controller.deletePayment);
 module.exports = router;

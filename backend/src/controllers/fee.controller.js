@@ -132,6 +132,56 @@ const listInvoices = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+const recalculateInvoice = async (invoiceId, schoolId) => {
+  const invoice = await FeeInvoice.findOne({ _id: invoiceId, schoolId });
+  if (!invoice) return null;
+  const payments = await FeePayment.find({ invoiceId: invoice._id, schoolId }).select('amount');
+  const paidAmount = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  invoice.paidAmount = paidAmount;
+  invoice.remainingAmount = Math.max(Number(invoice.totalAmount || 0) - paidAmount, 0);
+  if (invoice.status !== 'cancelled') {
+    invoice.status = invoice.remainingAmount === 0
+      ? 'paid'
+      : paidAmount > 0
+        ? 'partiallyPaid'
+        : 'unpaid';
+  }
+  await invoice.save();
+  return invoice;
+};
+
+const updateInvoice = asyncHandler(async (req, res) => {
+  const invoice = await FeeInvoice.findOne({ _id: req.params.invoiceId, schoolId: req.user.schoolId });
+  if (!invoice) { res.status(404); throw new Error('Invoice not found'); }
+
+  const currentItem = invoice.items?.[0] || {};
+  const amount = req.body.amount === undefined ? Number(currentItem.amount || 0) : Number(req.body.amount);
+  const discount = req.body.discount === undefined ? Number(invoice.discount || 0) : Number(req.body.discount);
+  const fine = req.body.fine === undefined ? Number(invoice.fine || 0) : Number(req.body.fine);
+  if (![amount, discount, fine].every(Number.isFinite) || amount < 0 || discount < 0 || fine < 0) {
+    res.status(400); throw new Error('Amount, discount and fine must be valid non-negative numbers');
+  }
+
+  const totalAmount = Math.max(amount - discount + fine, 0);
+  if (totalAmount < Number(invoice.paidAmount || 0)) {
+    res.status(400); throw new Error('Invoice total cannot be less than the paid amount');
+  }
+
+  invoice.items = [{
+    title: String(req.body.title ?? currentItem.title ?? 'Fee').trim() || 'Fee',
+    feeType: String(req.body.feeType ?? currentItem.feeType ?? 'other'),
+    amount,
+  }];
+  invoice.subtotal = amount;
+  invoice.discount = discount;
+  invoice.fine = fine;
+  invoice.totalAmount = totalAmount;
+  if (req.body.dueDate) invoice.dueDate = req.body.dueDate;
+  await invoice.save();
+  const data = await recalculateInvoice(invoice._id, req.user.schoolId);
+  res.json({ success: true, message: 'Invoice updated', data });
+});
+
 const recordPayment = asyncHandler(async (req, res) => {
   const invoice = await FeeInvoice.findOne({ _id: req.params.invoiceId, schoolId: req.user.schoolId });
   if (!invoice || invoice.status === 'cancelled') { res.status(404); throw new Error('Payable invoice not found'); }
@@ -141,11 +191,45 @@ const recordPayment = asyncHandler(async (req, res) => {
   if (!['cash', 'bankDeposit'].includes(method)) { res.status(400); throw new Error('Payment method must be cash or bankDeposit'); }
   const receiptNumber = `RCP-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
   const payment = await FeePayment.create({ schoolId: req.user.schoolId, invoiceId: invoice._id, studentId: invoice.studentId, receiptNumber, amount, method, reference: req.body.reference || '', recordedBy: req.user._id });
-  invoice.paidAmount += amount;
-  invoice.remainingAmount = Math.max(invoice.totalAmount - invoice.paidAmount, 0);
-  invoice.status = invoice.remainingAmount === 0 ? 'paid' : 'partiallyPaid';
-  await invoice.save();
-  res.status(201).json({ success: true, message: 'Payment recorded', data: { payment, invoice } });
+  const updatedInvoice = await recalculateInvoice(invoice._id, req.user.schoolId);
+  res.status(201).json({ success: true, message: 'Payment recorded', data: { payment, invoice: updatedInvoice } });
+});
+
+const updatePayment = asyncHandler(async (req, res) => {
+  const payment = await FeePayment.findOne({ _id: req.params.paymentId, schoolId: req.user.schoolId });
+  if (!payment) { res.status(404); throw new Error('Payment not found'); }
+  const invoice = await FeeInvoice.findOne({ _id: payment.invoiceId, schoolId: req.user.schoolId });
+  if (!invoice) { res.status(404); throw new Error('Invoice not found'); }
+
+  const amount = req.body.amount === undefined ? Number(payment.amount) : Number(req.body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) { res.status(400); throw new Error('Payment amount is invalid'); }
+  const otherPayments = await FeePayment.find({
+    schoolId: req.user.schoolId,
+    invoiceId: invoice._id,
+    _id: { $ne: payment._id },
+  }).select('amount');
+  const otherPaid = otherPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  if (otherPaid + amount > Number(invoice.totalAmount || 0)) {
+    res.status(400); throw new Error('Payment exceeds the invoice balance');
+  }
+
+  const method = req.body.method ?? payment.method;
+  if (!['cash', 'bankDeposit'].includes(method)) { res.status(400); throw new Error('Payment method must be cash or bankDeposit'); }
+  payment.amount = amount;
+  payment.method = method;
+  if (req.body.reference !== undefined) payment.reference = String(req.body.reference || '');
+  await payment.save();
+  const updatedInvoice = await recalculateInvoice(invoice._id, req.user.schoolId);
+  res.json({ success: true, message: 'Payment updated', data: { payment, invoice: updatedInvoice } });
+});
+
+const deletePayment = asyncHandler(async (req, res) => {
+  const payment = await FeePayment.findOne({ _id: req.params.paymentId, schoolId: req.user.schoolId });
+  if (!payment) { res.status(404); throw new Error('Payment not found'); }
+  const invoiceId = payment.invoiceId;
+  await payment.deleteOne();
+  const invoice = await recalculateInvoice(invoiceId, req.user.schoolId);
+  res.json({ success: true, message: 'Payment deleted', data: invoice });
 });
 
 const listPayments = asyncHandler(async (req, res) => {
@@ -308,7 +392,10 @@ module.exports = {
   createInvoice,
   createBulkInvoices,
   listInvoices,
+  updateInvoice,
   recordPayment,
+  updatePayment,
+  deletePayment,
   listPayments,
   getParentFeeStatus,
   createUpcomingFee,

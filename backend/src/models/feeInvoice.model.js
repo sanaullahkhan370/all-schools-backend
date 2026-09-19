@@ -6,6 +6,8 @@ const feeInvoiceSchema = new mongoose.Schema({
   academicSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicSession', required: true },
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
   invoiceNumber: { type: String, required: true, unique: true, uppercase: true },
+  billingMonth: { type: String, trim: true },
+  billingKey: { type: String, trim: true },
   items: [{ title: String, feeType: String, amount: { type: Number, min: 0 } }],
   subtotal: { type: Number, required: true, min: 0 },
   discount: { type: Number, default: 0, min: 0 },
@@ -19,4 +21,8 @@ const feeInvoiceSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
 feeInvoiceSchema.index({ schoolId: 1, studentId: 1, status: 1 });
+feeInvoiceSchema.index(
+  { schoolId: 1, academicSessionId: 1, studentId: 1, billingKey: 1 },
+  { unique: true, partialFilterExpression: { billingKey: { $type: 'string' } } }
+);
 module.exports = createTenantModel('FeeInvoice', feeInvoiceSchema);

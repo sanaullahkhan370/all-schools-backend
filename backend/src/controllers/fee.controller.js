@@ -388,6 +388,89 @@ const getParentFeeStatus = asyncHandler(async (req, res) => {
   res.json({ success: true, data: children });
 });
 
+const recordFamilyPayment = asyncHandler(async (req, res) => {
+  const schoolId = req.user.schoolId;
+  const amount = Number(req.body.amount);
+  const method = req.body.method;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400);
+    throw new Error('Payment amount is invalid');
+  }
+  if (!['cash', 'bankDeposit'].includes(method)) {
+    res.status(400);
+    throw new Error('Payment method must be cash or bankDeposit');
+  }
+
+  const student = await Student.findOne({
+    _id: req.params.studentId,
+    schoolId,
+    deletedAt: null,
+  }).select('_id');
+  if (!student) {
+    res.status(404);
+    throw new Error('Student not found');
+  }
+
+  const link = await ParentStudent.findOne({
+    schoolId,
+    studentId: student._id,
+    isActive: true,
+    canPayFees: true,
+  });
+  let studentIds = [student._id];
+  if (link) {
+    studentIds = await ParentStudent.find({
+      schoolId,
+      parentId: link.parentId,
+      isActive: true,
+      canPayFees: true,
+    }).distinct('studentId');
+  }
+
+  const invoices = await FeeInvoice.find({
+    schoolId,
+    studentId: { $in: studentIds },
+    status: { $nin: ['paid', 'cancelled'] },
+    remainingAmount: { $gt: 0 },
+  }).sort({ dueDate: 1, issueDate: 1, createdAt: 1 });
+
+  const balance = invoices.reduce(
+    (sum, invoice) => sum + Number(invoice.remainingAmount || 0),
+    0
+  );
+  if (amount > balance) {
+    res.status(400);
+    throw new Error('Payment exceeds the family outstanding balance');
+  }
+
+  const familyReceipt = `FAM-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  const payments = [];
+  let unallocated = amount;
+  for (let index = 0; index < invoices.length && unallocated > 0; index += 1) {
+    const invoice = invoices[index];
+    const allocated = Math.min(unallocated, Number(invoice.remainingAmount || 0));
+    const payment = await FeePayment.create({
+      schoolId,
+      invoiceId: invoice._id,
+      studentId: invoice.studentId,
+      receiptNumber: `${familyReceipt}-${String(index + 1).padStart(2, '0')}`,
+      amount: allocated,
+      method,
+      reference: req.body.reference || familyReceipt,
+      recordedBy: req.user._id,
+    });
+    payments.push(payment);
+    unallocated -= allocated;
+    await recalculateInvoice(invoice._id, schoolId);
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Family payment recorded and allocated to oldest dues',
+    data: { familyReceipt, amount, payments },
+  });
+});
+
 const getAdminFamilyFeeStatus = asyncHandler(async (req, res) => {
   const schoolId = req.user.schoolId;
   const student = await Student.findOne({
@@ -467,6 +550,7 @@ module.exports = {
   listPayments,
   getParentFeeStatus,
   getAdminFamilyFeeStatus,
+  recordFamilyPayment,
   createUpcomingFee,
   listUpcomingFees,
 };

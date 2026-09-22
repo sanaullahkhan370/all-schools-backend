@@ -24,6 +24,7 @@ router.post(
 );
 router.get('/payments', authorize('admin'), controller.listPayments);
 router.get('/families/:studentId', authorize('admin'), controller.getAdminFamilyFeeStatus);
+router.post('/families/:studentId/payments', authorize('admin'), controller.recordFamilyPayment);
 router.route('/payments/:paymentId')
   .patch(authorize('admin'), controller.updatePayment)
   .delete(authorize('admin'), controller.deletePayment);

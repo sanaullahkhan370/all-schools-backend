@@ -1,5 +1,7 @@
 const express = require('express');
 const {
+  uploadHomeworkAttachment,
+  downloadHomeworkAttachment,
   getTeacherHomework,
   createHomework,
   updateHomework,
@@ -16,7 +18,10 @@ const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 
 const router = express.Router();
+
+router.get('/attachments/:fileId', downloadHomeworkAttachment);
 router.use(protect);
+router.post('/attachments', authorize('teacher'), uploadHomeworkAttachment);
 
 router.get('/teacher', authorize('teacher'), getTeacherHomework);
 router.get('/teacher/responses', authorize('teacher'), getTeacherHomeworkResponses);

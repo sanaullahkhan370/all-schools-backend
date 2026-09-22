@@ -1,4 +1,7 @@
 const asyncHandler = require('express-async-handler');
+const mongoose = require('mongoose');
+const { Readable } = require('stream');
+const { getTenant } = require('../config/tenantModels');
 const Homework = require('../models/homework.model');
 const TeacherAssignment = require('../models/teacherAssignment.model');
 const ParentStudent = require('../models/parentStudent.model');
@@ -53,6 +56,78 @@ const requireOwnAssignment = async (req, assignmentId) => {
   return assignment;
 };
 
+const allowedAttachmentExtensions = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx',
+  'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'mp4', 'mov', 'webm',
+]);
+
+const uploadHomeworkAttachment = asyncHandler(async (req, res) => {
+  const { fileName, mimeType, data } = req.body;
+  const safeName = String(fileName || '').replace(/[^a-zA-Z0-9._ -]/g, '_').trim();
+  const extension = safeName.includes('.') ? safeName.split('.').pop().toLowerCase() : '';
+  if (!safeName || !data || !allowedAttachmentExtensions.has(extension)) {
+    res.status(400);
+    throw new Error('Select a supported image, document or video file');
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(String(data), 'base64');
+  } catch (_error) {
+    res.status(400);
+    throw new Error('Invalid attachment data');
+  }
+  if (!buffer.length || buffer.length > 20 * 1024 * 1024) {
+    res.status(400);
+    throw new Error('Attachment must be smaller than 20 MB');
+  }
+  const tenant = getTenant();
+  const bucket = new mongoose.mongo.GridFSBucket(tenant.connection.db, {
+    bucketName: 'homeworkAttachments',
+  });
+  const uploadStream = bucket.openUploadStream(safeName, {
+    contentType: String(mimeType || 'application/octet-stream'),
+    metadata: {
+      schoolId: req.user.schoolId.toString(),
+      uploadedBy: req.user._id.toString(),
+      schoolCode: req.schoolCode,
+    },
+  });
+  await new Promise((resolve, reject) => {
+    Readable.from(buffer).pipe(uploadStream).on('error', reject).on('finish', resolve);
+  });
+  res.status(201).json({
+    success: true,
+    data: {
+      attachmentUrl: `/api/homework/attachments/${uploadStream.id}?schoolCode=${encodeURIComponent(req.schoolCode)}`,
+      attachmentName: safeName,
+      attachmentType: String(mimeType || 'application/octet-stream'),
+    },
+  });
+});
+
+const downloadHomeworkAttachment = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.fileId)) {
+    res.status(404);
+    throw new Error('Attachment not found');
+  }
+  const tenant = getTenant();
+  const bucket = new mongoose.mongo.GridFSBucket(tenant.connection.db, {
+    bucketName: 'homeworkAttachments',
+  });
+  const files = await bucket.find({ _id: new mongoose.Types.ObjectId(req.params.fileId) }).toArray();
+  if (!files.length) {
+    res.status(404);
+    throw new Error('Attachment not found');
+  }
+  const file = files[0];
+  res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${String(file.filename).replace(/"/g, '')}"`);
+  bucket.openDownloadStream(file._id).on('error', (error) => {
+    if (!res.headersSent) res.status(404).json({ success: false, message: error.message });
+    else res.destroy(error);
+  }).pipe(res);
+});
+
 const getTeacherHomework = asyncHandler(async (req, res) => {
   const data = await populateHomework(Homework.find({
     schoolId: req.user.schoolId,
@@ -62,7 +137,10 @@ const getTeacherHomework = asyncHandler(async (req, res) => {
 });
 
 const createHomework = asyncHandler(async (req, res) => {
-  const { assignmentId, title, description, assignedDate, dueDate, status, attachmentUrl, maximumMarks } = req.body;
+  const {
+    assignmentId, title, description, assignedDate, dueDate, status,
+    attachmentUrl, attachmentName, attachmentType, maximumMarks,
+  } = req.body;
   if (!assignmentId || !title?.trim() || !description?.trim() || !dueDate) {
     res.status(400);
     throw new Error('Assignment, title, description and due date are required');
@@ -88,6 +166,8 @@ const createHomework = asyncHandler(async (req, res) => {
     dueDate: due,
     status: ['draft', 'published'].includes(status) ? status : 'published',
     attachmentUrl: attachmentUrl?.trim() || '',
+    attachmentName: attachmentName?.trim() || '',
+    attachmentType: attachmentType?.trim() || '',
     maximumMarks: Number(maximumMarks) > 0 ? Number(maximumMarks) : 10,
   });
   const data = await populateHomework(Homework.findById(item._id));
@@ -104,7 +184,10 @@ const updateHomework = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Homework not found');
   }
-  const allowed = ['title', 'description', 'assignedDate', 'dueDate', 'status', 'attachmentUrl', 'maximumMarks'];
+  const allowed = [
+    'title', 'description', 'assignedDate', 'dueDate', 'status',
+    'attachmentUrl', 'attachmentName', 'attachmentType', 'maximumMarks',
+  ];
   for (const key of allowed) {
     if (req.body[key] !== undefined) item[key] = req.body[key];
   }
@@ -423,6 +506,8 @@ const getAdminHomeworkResponses = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  uploadHomeworkAttachment,
+  downloadHomeworkAttachment,
   getTeacherHomework,
   createHomework,
   updateHomework,

@@ -13,6 +13,7 @@ router.route('/structures')
   .get(authorize('admin'), controller.listStructures)
   .post(authorize('admin'), controller.createStructure);
 router.post('/invoices/bulk', authorize('admin'), controller.createBulkInvoices);
+router.post('/invoices/family', authorize('admin'), controller.createFamilyInvoice);
 router.route('/invoices')
   .get(authorize('admin'), controller.listInvoices)
   .post(authorize('admin'), controller.createInvoice);

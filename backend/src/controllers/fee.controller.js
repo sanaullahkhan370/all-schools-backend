@@ -388,6 +388,76 @@ const getParentFeeStatus = asyncHandler(async (req, res) => {
   res.json({ success: true, data: children });
 });
 
+const createFamilyInvoice = asyncHandler(async (req, res) => {
+  const {
+    academicSessionId,
+    title,
+    feeType,
+    amount,
+    dueDate,
+  } = req.body;
+  const studentIds = [...new Set((req.body.studentIds || []).map(String))];
+  const totalAmount = Number(amount);
+
+  if (!academicSessionId || !title?.trim() || !feeType || !dueDate || !studentIds.length) {
+    res.status(400);
+    throw new Error('Session, title, fee type, due date and children are required');
+  }
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    res.status(400);
+    throw new Error('A valid family fee total is required');
+  }
+
+  const students = await Student.find({
+    _id: { $in: studentIds },
+    schoolId: req.user.schoolId,
+    deletedAt: null,
+  }).select('_id fullName');
+  if (students.length !== studentIds.length) {
+    res.status(400);
+    throw new Error('One or more selected Students are invalid');
+  }
+
+  const amountInPaisa = Math.round(totalAmount * 100);
+  const baseShare = Math.floor(amountInPaisa / students.length);
+  let remainder = amountInPaisa - baseShare * students.length;
+  const familyReference = `FEE-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  const invoices = [];
+
+  for (let index = 0; index < students.length; index += 1) {
+    const shareInPaisa = baseShare + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    const share = shareInPaisa / 100;
+    const invoiceNumber = `INV-${Date.now()}-${index + 1}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const invoice = await FeeInvoice.create({
+      schoolId: req.user.schoolId,
+      academicSessionId,
+      studentId: students[index]._id,
+      invoiceNumber,
+      items: [{
+        title: title.trim(),
+        feeType,
+        amount: share,
+      }],
+      subtotal: share,
+      discount: 0,
+      fine: 0,
+      totalAmount: share,
+      remainingAmount: share,
+      dueDate,
+      notes: `${req.body.notes || ''} Family reference: ${familyReference}`.trim(),
+      createdBy: req.user._id,
+    });
+    invoices.push(invoice);
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Family invoice created for selected children',
+    data: { familyReference, totalAmount, invoices },
+  });
+});
+
 const recordFamilyPayment = asyncHandler(async (req, res) => {
   const schoolId = req.user.schoolId;
   const amount = Number(req.body.amount);
@@ -542,6 +612,7 @@ module.exports = {
   listStructures,
   createInvoice,
   createBulkInvoices,
+  createFamilyInvoice,
   listInvoices,
   updateInvoice,
   recordPayment,

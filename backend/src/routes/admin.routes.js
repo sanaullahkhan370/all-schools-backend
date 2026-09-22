@@ -2,6 +2,7 @@ const express = require('express');
 const {
   createTeacher,
   createParent,
+  listParents,
   getSchoolUsers,
   getDashboardStats,
 } = require('../controllers/admin.controller');
@@ -16,7 +17,9 @@ router.use(authorize('admin'));
 
 router.get('/dashboard', getDashboardStats);
 router.post('/teachers', createTeacher);
-router.post('/parents', createParent);
+router.route('/parents')
+  .get(listParents)
+  .post(createParent);
 router.get('/users', getSchoolUsers);
 
 module.exports = router;

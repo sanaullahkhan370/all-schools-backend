@@ -388,6 +388,72 @@ const getParentFeeStatus = asyncHandler(async (req, res) => {
   res.json({ success: true, data: children });
 });
 
+const getAdminFamilyFeeStatus = asyncHandler(async (req, res) => {
+  const schoolId = req.user.schoolId;
+  const student = await Student.findOne({
+    _id: req.params.studentId,
+    schoolId,
+    deletedAt: null,
+  }).select('fullName admissionNumber');
+  if (!student) {
+    res.status(404);
+    throw new Error('Student not found');
+  }
+
+  const selectedLink = await ParentStudent.findOne({
+    schoolId,
+    studentId: student._id,
+    isActive: true,
+    canPayFees: true,
+  }).populate('parentId', 'name email phone');
+
+  let students = [student];
+  let parent = null;
+  if (selectedLink?.parentId) {
+    parent = selectedLink.parentId;
+    const familyLinks = await ParentStudent.find({
+      schoolId,
+      parentId: selectedLink.parentId._id,
+      isActive: true,
+      canPayFees: true,
+    }).populate('studentId', 'fullName admissionNumber');
+    students = familyLinks.filter((link) => link.studentId).map((link) => link.studentId);
+  }
+
+  const children = [];
+  for (const child of students) {
+    const invoices = await FeeInvoice.find({
+      schoolId,
+      studentId: child._id,
+      status: { $ne: 'cancelled' },
+    }).sort({ issueDate: -1, createdAt: -1 });
+    const summary = invoices.reduce((total, invoice) => {
+      total.totalAmount += Number(invoice.totalAmount || 0);
+      total.paidAmount += Number(invoice.paidAmount || 0);
+      total.remainingAmount += Number(invoice.remainingAmount || 0);
+      return total;
+    }, { totalAmount: 0, paidAmount: 0, remainingAmount: 0 });
+    children.push({ student: child, summary });
+  }
+
+  const summary = children.reduce((total, child) => {
+    total.totalAmount += child.summary.totalAmount;
+    total.paidAmount += child.summary.paidAmount;
+    total.remainingAmount += child.summary.remainingAmount;
+    return total;
+  }, { totalAmount: 0, paidAmount: 0, remainingAmount: 0 });
+
+  res.json({
+    success: true,
+    data: {
+      isFamily: children.length > 1,
+      parent,
+      children,
+      summary,
+    },
+  });
+});
+
 module.exports = {
   createStructure,
   listStructures,
@@ -400,6 +466,7 @@ module.exports = {
   deletePayment,
   listPayments,
   getParentFeeStatus,
+  getAdminFamilyFeeStatus,
   createUpcomingFee,
   listUpcomingFees,
 };

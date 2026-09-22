@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const User = require('../models/user.model');
 const Student = require('../models/student.model');
 const SchoolClass = require('../models/class.model');
+const ParentStudent = require('../models/parentStudent.model');
 
 // @desc    Create a teacher
 // @route   POST /api/admin/teachers
@@ -44,35 +45,106 @@ const createTeacher = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const createParent = asyncHandler(async (req, res) => {
   const { name, email, phone, password } = req.body;
+  const studentIds = [...new Set((req.body.studentIds || []).map(String))];
 
-  const userExists = await User.findOne({ $or: [{ email }, { phone }] });
+  if (!name?.trim() || !email?.trim() || !phone?.trim() || !password) {
+    res.status(400);
+    throw new Error('Parent name, email, phone and password are required');
+  }
+  if (password.length < 6) {
+    res.status(400);
+    throw new Error('Password must contain at least 6 characters');
+  }
+  if (!studentIds.length) {
+    res.status(400);
+    throw new Error('Select at least one child for this Parent account');
+  }
+
+  const [userExists, students] = await Promise.all([
+    User.findOne({
+      schoolId: req.user.schoolId,
+      $or: [
+        { email: email.trim().toLowerCase() },
+        { phone: phone.trim() },
+      ],
+    }),
+    Student.find({
+      _id: { $in: studentIds },
+      schoolId: req.user.schoolId,
+      deletedAt: null,
+    }).select('_id fullName admissionNumber'),
+  ]);
 
   if (userExists) {
-    res.status(400);
+    res.status(409);
     throw new Error('User with this email or phone already exists');
+  }
+  if (students.length !== studentIds.length) {
+    res.status(400);
+    throw new Error('One or more selected Students are invalid');
   }
 
   const parent = await User.create({
-    name,
-    email,
-    phone,
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    phone: phone.trim(),
     password,
     role: 'parent',
-    schoolId: req.user.schoolId, // Admin's school ID automatically assigned
+    schoolId: req.user.schoolId,
     createdBy: req.user._id,
   });
 
+  try {
+    await ParentStudent.insertMany(students.map((student, index) => ({
+      schoolId: req.user.schoolId,
+      parentId: parent._id,
+      studentId: student._id,
+      relationship: req.body.relationship || 'father',
+      isPrimaryGuardian: index === 0,
+      canViewAcademicData: true,
+      canPayFees: true,
+      isActive: true,
+      createdBy: req.user._id,
+    })));
+  } catch (error) {
+    await User.deleteOne({ _id: parent._id });
+    throw error;
+  }
+
   res.status(201).json({
     success: true,
-    message: 'Parent created successfully',
+    message: 'Parent login created and linked with selected children',
     data: {
       _id: parent._id,
       name: parent.name,
       email: parent.email,
+      phone: parent.phone,
       role: parent.role,
-      schoolId: parent.schoolId,
+      children: students,
     },
   });
+});
+
+const listParents = asyncHandler(async (req, res) => {
+  const parents = await User.find({
+    schoolId: req.user.schoolId,
+    role: 'parent',
+    deletedAt: null,
+  }).select('name email phone isActive createdAt').sort({ name: 1 });
+
+  const data = await Promise.all(parents.map(async (parent) => {
+    const links = await ParentStudent.find({
+      schoolId: req.user.schoolId,
+      parentId: parent._id,
+      isActive: true,
+    }).populate('studentId', 'fullName admissionNumber');
+    return {
+      ...parent.toObject(),
+      children: links.filter((link) => link.studentId).map((link) => link.studentId),
+    };
+  }));
+
+  res.json({ success: true, data });
 });
 
 // @desc    Get all users of the school
@@ -99,6 +171,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
 module.exports = {
   createTeacher,
   createParent,
+  listParents,
   getSchoolUsers,
   getDashboardStats,
 };

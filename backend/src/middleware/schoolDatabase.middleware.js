@@ -19,7 +19,9 @@ const schoolDatabases = () => ({
     process.env.AL_ZOHRAN_SCHOOL_DB || 'al_zohran_school_musa_wali',
 });
 const selectSchoolDatabase = (req, res, next) => {
-  const schoolCode = String(req.get('X-School-Code') || 'city_school').trim().toLowerCase();
+  const schoolCode = String(
+    req.get('X-School-Code') || req.query.schoolCode || 'city_school'
+  ).trim().toLowerCase();
   const databaseName = schoolDatabases()[schoolCode];
   if (!databaseName) return res.status(400).json({ success: false, message: 'Invalid or unsupported school code' });
   const connection = mongoose.connection.useDb(databaseName, { useCache: true });

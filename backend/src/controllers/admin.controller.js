@@ -147,6 +147,120 @@ const listParents = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+const updateParent = asyncHandler(async (req, res) => {
+  const parent = await User.findOne({
+    _id: req.params.id,
+    schoolId: req.user.schoolId,
+    role: 'parent',
+    deletedAt: null,
+  });
+  if (!parent) {
+    res.status(404);
+    throw new Error('Parent account not found');
+  }
+
+  for (const field of ['name', 'email', 'phone']) {
+    if (req.body[field] !== undefined && !String(req.body[field]).trim()) {
+      res.status(400);
+      throw new Error(`${field} cannot be empty`);
+    }
+  }
+  if (req.body.password !== undefined && String(req.body.password).length < 6) {
+    res.status(400);
+    throw new Error('Password must contain at least 6 characters');
+  }
+
+  const email = req.body.email?.trim().toLowerCase();
+  const phone = req.body.phone?.trim();
+  if (email || phone) {
+    const duplicate = await User.findOne({
+      _id: { $ne: parent._id },
+      schoolId: req.user.schoolId,
+      $or: [
+        ...(email ? [{ email }] : []),
+        ...(phone ? [{ phone }] : []),
+      ],
+    });
+    if (duplicate) {
+      res.status(409);
+      throw new Error('Email or phone is already used by another account');
+    }
+  }
+
+  if (req.body.name !== undefined) parent.name = req.body.name.trim();
+  if (email) parent.email = email;
+  if (phone) parent.phone = phone;
+  if (req.body.password) parent.password = String(req.body.password);
+  if (req.body.isActive !== undefined) parent.isActive = req.body.isActive === true;
+  await parent.save();
+
+  if (Array.isArray(req.body.studentIds)) {
+    const studentIds = [...new Set(req.body.studentIds.map(String))];
+    if (!studentIds.length) {
+      res.status(400);
+      throw new Error('Select at least one child');
+    }
+    const students = await Student.find({
+      _id: { $in: studentIds },
+      schoolId: req.user.schoolId,
+      deletedAt: null,
+    }).select('_id');
+    if (students.length !== studentIds.length) {
+      res.status(400);
+      throw new Error('One or more selected Students are invalid');
+    }
+    await ParentStudent.updateMany(
+      { schoolId: req.user.schoolId, parentId: parent._id },
+      { $set: { isActive: false, updatedBy: req.user._id } }
+    );
+    for (let index = 0; index < studentIds.length; index += 1) {
+      await ParentStudent.findOneAndUpdate(
+        {
+          schoolId: req.user.schoolId,
+          parentId: parent._id,
+          studentId: studentIds[index],
+        },
+        {
+          $set: {
+            relationship: req.body.relationship || 'guardian',
+            isPrimaryGuardian: index === 0,
+            canViewAcademicData: true,
+            canPayFees: true,
+            isActive: true,
+            updatedBy: req.user._id,
+          },
+          $setOnInsert: { createdBy: req.user._id },
+        },
+        { upsert: true, runValidators: true }
+      );
+    }
+  }
+
+  res.json({ success: true, message: 'Parent account updated', data: parent });
+});
+
+const deleteParent = asyncHandler(async (req, res) => {
+  const parent = await User.findOne({
+    _id: req.params.id,
+    schoolId: req.user.schoolId,
+    role: 'parent',
+    deletedAt: null,
+  });
+  if (!parent) {
+    res.status(404);
+    throw new Error('Parent account not found');
+  }
+  parent.isActive = false;
+  parent.deletedAt = new Date();
+  parent.deletedBy = req.user._id;
+  await parent.save();
+  await ParentStudent.updateMany(
+    { schoolId: req.user.schoolId, parentId: parent._id, isActive: true },
+    { $set: { isActive: false, updatedBy: req.user._id } }
+  );
+  res.json({ success: true, message: 'Parent account deactivated' });
+});
+
 // @desc    Get all users of the school
 // @route   GET /api/admin/users
 // @access  Private/Admin
@@ -172,6 +286,8 @@ module.exports = {
   createTeacher,
   createParent,
   listParents,
+  updateParent,
+  deleteParent,
   getSchoolUsers,
   getDashboardStats,
 };

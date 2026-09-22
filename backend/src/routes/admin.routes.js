@@ -3,6 +3,8 @@ const {
   createTeacher,
   createParent,
   listParents,
+  updateParent,
+  deleteParent,
   getSchoolUsers,
   getDashboardStats,
 } = require('../controllers/admin.controller');
@@ -20,6 +22,9 @@ router.post('/teachers', createTeacher);
 router.route('/parents')
   .get(listParents)
   .post(createParent);
+router.route('/parents/:id')
+  .patch(updateParent)
+  .delete(deleteParent);
 router.get('/users', getSchoolUsers);
 
 module.exports = router;

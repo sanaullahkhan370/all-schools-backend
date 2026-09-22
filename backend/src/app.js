@@ -26,7 +26,7 @@ const app = express();
 // Security Middlewares
 app.use(helmet()); // HTTP headers security ke liye
 app.use(cors()); // Cross-Origin Resource Sharing allow karne ke liye
-app.use(express.json()); // JSON body parse karne ke liye
+app.use(express.json({ limit: '30mb' })); // Homework attachments ke liye larger JSON body
 app.use(selectSchoolDatabase); // Har request ko us school ke database se route kare
 
 // Rate limiting: production mein 100, local development mein 5000 requests

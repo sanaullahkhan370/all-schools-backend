@@ -397,15 +397,19 @@ const createFamilyInvoice = asyncHandler(async (req, res) => {
     dueDate,
   } = req.body;
   const studentIds = [...new Set((req.body.studentIds || []).map(String))];
-  const totalAmount = Number(amount);
+  const currentFeeAmount = Number(amount);
+  const previousDuesAmount = Number(req.body.previousDues || 0);
+  const totalAmount = currentFeeAmount + previousDuesAmount;
 
   if (!academicSessionId || !title?.trim() || !feeType || !dueDate || !studentIds.length) {
     res.status(400);
     throw new Error('Session, title, fee type, due date and children are required');
   }
-  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+  if (!Number.isFinite(currentFeeAmount) || currentFeeAmount < 0 ||
+      !Number.isFinite(previousDuesAmount) || previousDuesAmount < 0 ||
+      totalAmount <= 0) {
     res.status(400);
-    throw new Error('A valid family fee total is required');
+    throw new Error('Current fee and previous dues must be valid non-negative amounts');
   }
 
   const students = await Student.find({
@@ -418,27 +422,41 @@ const createFamilyInvoice = asyncHandler(async (req, res) => {
     throw new Error('One or more selected Students are invalid');
   }
 
-  const amountInPaisa = Math.round(totalAmount * 100);
-  const baseShare = Math.floor(amountInPaisa / students.length);
-  let remainder = amountInPaisa - baseShare * students.length;
+  const currentInPaisa = Math.round(currentFeeAmount * 100);
+  const duesInPaisa = Math.round(previousDuesAmount * 100);
+  const currentBase = Math.floor(currentInPaisa / students.length);
+  const duesBase = Math.floor(duesInPaisa / students.length);
+  let currentRemainder = currentInPaisa - currentBase * students.length;
+  let duesRemainder = duesInPaisa - duesBase * students.length;
   const familyReference = `FEE-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
   const invoices = [];
 
   for (let index = 0; index < students.length; index += 1) {
-    const shareInPaisa = baseShare + (remainder > 0 ? 1 : 0);
-    if (remainder > 0) remainder -= 1;
-    const share = shareInPaisa / 100;
+    const currentShareInPaisa = currentBase + (currentRemainder > 0 ? 1 : 0);
+    const duesShareInPaisa = duesBase + (duesRemainder > 0 ? 1 : 0);
+    if (currentRemainder > 0) currentRemainder -= 1;
+    if (duesRemainder > 0) duesRemainder -= 1;
+    const currentShare = currentShareInPaisa / 100;
+    const duesShare = duesShareInPaisa / 100;
+    const share = currentShare + duesShare;
     const invoiceNumber = `INV-${Date.now()}-${index + 1}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const invoice = await FeeInvoice.create({
       schoolId: req.user.schoolId,
       academicSessionId,
       studentId: students[index]._id,
       invoiceNumber,
-      items: [{
-        title: title.trim(),
-        feeType,
-        amount: share,
-      }],
+      items: [
+        ...(currentShare > 0 ? [{
+          title: title.trim(),
+          feeType,
+          amount: currentShare,
+        }] : []),
+        ...(duesShare > 0 ? [{
+          title: 'Previous Dues',
+          feeType: 'previousDues',
+          amount: duesShare,
+        }] : []),
+      ],
       subtotal: share,
       discount: 0,
       fine: 0,
@@ -454,7 +472,13 @@ const createFamilyInvoice = asyncHandler(async (req, res) => {
   res.status(201).json({
     success: true,
     message: 'Family invoice created for selected children',
-    data: { familyReference, totalAmount, invoices },
+    data: {
+      familyReference,
+      currentFeeAmount,
+      previousDuesAmount,
+      totalAmount,
+      invoices,
+    },
   });
 });
 
@@ -584,8 +608,21 @@ const getAdminFamilyFeeStatus = asyncHandler(async (req, res) => {
       total.totalAmount += Number(invoice.totalAmount || 0);
       total.paidAmount += Number(invoice.paidAmount || 0);
       total.remainingAmount += Number(invoice.remainingAmount || 0);
+      for (const item of invoice.items || []) {
+        if (item.feeType === 'previousDues') {
+          total.previousDuesAmount += Number(item.amount || 0);
+        } else {
+          total.currentFeeAmount += Number(item.amount || 0);
+        }
+      }
       return total;
-    }, { totalAmount: 0, paidAmount: 0, remainingAmount: 0 });
+    }, {
+      currentFeeAmount: 0,
+      previousDuesAmount: 0,
+      totalAmount: 0,
+      paidAmount: 0,
+      remainingAmount: 0,
+    });
     children.push({ student: child, summary });
   }
 
@@ -594,7 +631,15 @@ const getAdminFamilyFeeStatus = asyncHandler(async (req, res) => {
     total.paidAmount += child.summary.paidAmount;
     total.remainingAmount += child.summary.remainingAmount;
     return total;
-  }, { totalAmount: 0, paidAmount: 0, remainingAmount: 0 });
+    total.currentFeeAmount += child.summary.currentFeeAmount;
+    total.previousDuesAmount += child.summary.previousDuesAmount;
+  }, {
+    currentFeeAmount: 0,
+    previousDuesAmount: 0,
+    totalAmount: 0,
+    paidAmount: 0,
+    remainingAmount: 0,
+  });
 
   res.json({
     success: true,

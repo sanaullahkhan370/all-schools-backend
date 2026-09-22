@@ -16,6 +16,8 @@ const homeworkSchema = new mongoose.Schema(
     dueDate: { type: Date, required: true, index: true },
     status: { type: String, enum: ['draft', 'published', 'closed'], default: 'published', index: true },
     attachmentUrl: { type: String, trim: true, default: '' },
+    attachmentName: { type: String, trim: true, default: '' },
+    attachmentType: { type: String, trim: true, default: '' },
     maximumMarks: { type: Number, required: true, min: 1, max: 100, default: 10 },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

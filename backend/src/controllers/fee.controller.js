@@ -627,12 +627,12 @@ const getAdminFamilyFeeStatus = asyncHandler(async (req, res) => {
   }
 
   const summary = children.reduce((total, child) => {
+    total.currentFeeAmount += child.summary.currentFeeAmount;
+    total.previousDuesAmount += child.summary.previousDuesAmount;
     total.totalAmount += child.summary.totalAmount;
     total.paidAmount += child.summary.paidAmount;
     total.remainingAmount += child.summary.remainingAmount;
     return total;
-    total.currentFeeAmount += child.summary.currentFeeAmount;
-    total.previousDuesAmount += child.summary.previousDuesAmount;
   }, {
     currentFeeAmount: 0,
     previousDuesAmount: 0,

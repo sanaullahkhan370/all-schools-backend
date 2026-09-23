@@ -48,9 +48,9 @@ const createBulkInvoices = asyncHandler(async (req, res) => {
     billingMonth,
   } = req.body;
 
-  if (!academicSessionId || !title?.trim() || !feeType || amount === undefined || !dueDate || !billingMonth) {
+  if (!academicSessionId || !classId || !title?.trim() || !feeType || amount === undefined || !dueDate || !billingMonth) {
     res.status(400);
-    throw new Error('Session, title, fee type, amount, due date and billing month are required');
+    throw new Error('Session, Class, title, fee type, amount, due date and billing month are required');
   }
 
   const cleanAmount = Number(amount);
@@ -79,7 +79,8 @@ const createBulkInvoices = asyncHandler(async (req, res) => {
     throw new Error('No active students found for the selected class or section');
   }
 
-  const billingKey = `${billingMonth}:${feeType}`;
+  const titleKey = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const billingKey = `${billingMonth}:${feeType}:${titleKey}`;
   const existing = await FeeInvoice.find({
     schoolId: req.user.schoolId,
     academicSessionId,

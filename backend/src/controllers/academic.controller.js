@@ -138,6 +138,52 @@ const listTerms = asyncHandler(async (req, res) => {
   res.json({ success: true, data: terms });
 });
 
+const updateTerm = asyncHandler(async (req, res) => {
+  const record = await findOwned(Term, req.params.id, req.user.schoolId, 'Term');
+  const academicSessionId = req.body.academicSessionId || record.academicSessionId;
+  const session = await findOwned(
+    AcademicSession,
+    academicSessionId,
+    req.user.schoolId,
+    'Academic session'
+  );
+  const updates = allowed(req.body, [
+    'academicSessionId',
+    'name',
+    'startDate',
+    'endDate',
+    'resultPublishDate',
+    'status',
+  ]);
+  const startDate = updates.startDate || record.startDate;
+  const endDate = updates.endDate || record.endDate;
+  validateDates(res, startDate, endDate);
+  if (new Date(startDate) < session.startDate || new Date(endDate) > session.endDate) {
+    res.status(400);
+    throw new Error('Term dates must be inside the academic session dates');
+  }
+  Object.assign(record, updates, {
+    academicSessionId: session._id,
+    updatedBy: req.user._id,
+  });
+  await record.save();
+  res.json({ success: true, message: 'Term updated', data: record });
+});
+
+const deleteTerm = asyncHandler(async (req, res) => {
+  const record = await findOwned(Term, req.params.id, req.user.schoolId, 'Term');
+  const examination = await Examination.exists({
+    schoolId: req.user.schoolId,
+    termId: record._id,
+  });
+  if (examination) {
+    res.status(409);
+    throw new Error('Term is in use by an examination and cannot be deleted');
+  }
+  await record.deleteOne();
+  res.json({ success: true, message: 'Term deleted' });
+});
+
 const createClass = asyncHandler(async (req, res) => {
   requireFields(res, req.body, ['academicSessionId', 'name']);
   await findOwned(AcademicSession, req.body.academicSessionId, req.user.schoolId, 'Academic session');
@@ -372,7 +418,7 @@ const deactivateTeacherAssignment = asyncHandler(async (req, res) => {
 
 module.exports = {
   createSession, listSessions, updateSession, deleteSession, setCurrentSession,
-  createTerm, listTerms,
+  createTerm, listTerms, updateTerm, deleteTerm,
   createClass, listClasses,
   createSection, listSections, updateSection, deleteSection,
   createSubject, listSubjects, updateSubject, deleteSubject,

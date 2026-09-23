@@ -154,15 +154,22 @@ const updateInvoice = asyncHandler(async (req, res) => {
   const invoice = await FeeInvoice.findOne({ _id: req.params.invoiceId, schoolId: req.user.schoolId });
   if (!invoice) { res.status(404); throw new Error('Invoice not found'); }
 
-  const currentItem = invoice.items?.[0] || {};
+  const previousItem = invoice.items?.find((item) => item.feeType === 'previousDues');
+  const currentItem = invoice.items?.find((item) => item.feeType !== 'previousDues') || invoice.items?.[0] || {};
   const amount = req.body.amount === undefined ? Number(currentItem.amount || 0) : Number(req.body.amount);
+  const previousDues = req.body.previousDues === undefined
+    ? Number(previousItem?.amount || 0)
+    : Number(req.body.previousDues);
   const discount = req.body.discount === undefined ? Number(invoice.discount || 0) : Number(req.body.discount);
   const fine = req.body.fine === undefined ? Number(invoice.fine || 0) : Number(req.body.fine);
-  if (![amount, discount, fine].every(Number.isFinite) || amount < 0 || discount < 0 || fine < 0) {
-    res.status(400); throw new Error('Amount, discount and fine must be valid non-negative numbers');
+  if (![amount, previousDues, discount, fine].every(Number.isFinite)
+      || amount < 0 || previousDues < 0 || discount < 0 || fine < 0) {
+    res.status(400);
+    throw new Error('Fee, previous dues, discount and fine must be valid non-negative numbers');
   }
 
-  const totalAmount = Math.max(amount - discount + fine, 0);
+  const subtotal = amount + previousDues;
+  const totalAmount = Math.max(subtotal - discount + fine, 0);
   if (totalAmount < Number(invoice.paidAmount || 0)) {
     res.status(400); throw new Error('Invoice total cannot be less than the paid amount');
   }
@@ -172,7 +179,14 @@ const updateInvoice = asyncHandler(async (req, res) => {
     feeType: String(req.body.feeType ?? currentItem.feeType ?? 'other'),
     amount,
   }];
-  invoice.subtotal = amount;
+  if (previousDues > 0) {
+    invoice.items.push({
+      title: 'Previous dues',
+      feeType: 'previousDues',
+      amount: previousDues,
+    });
+  }
+  invoice.subtotal = subtotal;
   invoice.discount = discount;
   invoice.fine = fine;
   invoice.totalAmount = totalAmount;

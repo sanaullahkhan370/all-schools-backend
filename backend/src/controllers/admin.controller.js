@@ -3,6 +3,8 @@ const User = require('../models/user.model');
 const Student = require('../models/student.model');
 const SchoolClass = require('../models/class.model');
 const ParentStudent = require('../models/parentStudent.model');
+const StudentEnrollment = require('../models/studentEnrollment.model');
+const FeeInvoice = require('../models/feeInvoice.model');
 
 // @desc    Create a teacher
 // @route   POST /api/admin/teachers
@@ -126,23 +128,102 @@ const createParent = asyncHandler(async (req, res) => {
 });
 
 const listParents = asyncHandler(async (req, res) => {
+  const schoolId = req.user.schoolId;
   const parents = await User.find({
-    schoolId: req.user.schoolId,
+    schoolId,
     role: 'parent',
     deletedAt: null,
   }).select('name email phone isActive createdAt').sort({ name: 1 });
 
-  const data = await Promise.all(parents.map(async (parent) => {
-    const links = await ParentStudent.find({
-      schoolId: req.user.schoolId,
-      parentId: parent._id,
-      isActive: true,
-    }).populate('studentId', 'fullName admissionNumber');
-    return {
-      ...parent.toObject(),
-      children: links.filter((link) => link.studentId).map((link) => link.studentId),
-    };
-  }));
+  const links = await ParentStudent.find({
+    schoolId,
+    parentId: { $in: parents.map((parent) => parent._id) },
+    isActive: true,
+  }).populate('studentId', 'fullName admissionNumber');
+
+  const studentIds = [...new Set(
+    links.filter((link) => link.studentId).map((link) => link.studentId._id.toString())
+  )];
+
+  const [enrollments, invoices] = studentIds.length
+    ? await Promise.all([
+        StudentEnrollment.find({
+          schoolId,
+          studentId: { $in: studentIds },
+          isCurrent: true,
+          status: 'active',
+        })
+          .populate('classId', 'name')
+          .populate('sectionId', 'name')
+          .populate('academicSessionId', 'name')
+          .lean(),
+        FeeInvoice.find({
+          schoolId,
+          studentId: { $in: studentIds },
+          status: { $ne: 'cancelled' },
+        })
+          .select('studentId invoiceNumber items subtotal discount fine totalAmount paidAmount remainingAmount dueDate status billingMonth createdAt')
+          .sort({ dueDate: -1, createdAt: -1 })
+          .lean(),
+      ])
+    : [[], []];
+
+  const enrollmentByStudent = new Map(
+    enrollments.map((item) => [item.studentId.toString(), item])
+  );
+  const invoicesByStudent = new Map();
+  for (const invoice of invoices) {
+    const studentId = invoice.studentId.toString();
+    if (!invoicesByStudent.has(studentId)) invoicesByStudent.set(studentId, []);
+    invoicesByStudent.get(studentId).push(invoice);
+  }
+
+  const linksByParent = new Map();
+  for (const link of links) {
+    if (!link.studentId) continue;
+    const parentId = link.parentId.toString();
+    if (!linksByParent.has(parentId)) linksByParent.set(parentId, []);
+    linksByParent.get(parentId).push(link);
+  }
+
+  const data = parents.map((parent) => {
+    const children = (linksByParent.get(parent._id.toString()) || []).map((link) => {
+      const student = link.studentId.toObject();
+      const studentInvoices = invoicesByStudent.get(student._id.toString()) || [];
+      const summary = studentInvoices.reduce(
+        (totals, invoice) => ({
+          totalAmount: totals.totalAmount + Number(invoice.totalAmount || 0),
+          paidAmount: totals.paidAmount + Number(invoice.paidAmount || 0),
+          remainingAmount: totals.remainingAmount + Number(invoice.remainingAmount || 0),
+          previousDues: totals.previousDues + (invoice.items || [])
+            .filter((item) => item.feeType === 'previousDues')
+            .reduce((sum, item) => sum + Number(item.amount || 0), 0),
+        }),
+        { totalAmount: 0, paidAmount: 0, remainingAmount: 0, previousDues: 0 }
+      );
+      summary.currentFee = Math.max(summary.totalAmount - summary.previousDues, 0);
+      return {
+        ...student,
+        relationship: link.relationship,
+        currentEnrollment: enrollmentByStudent.get(student._id.toString()) || null,
+        feeSummary: summary,
+        invoices: studentInvoices,
+      };
+    });
+
+    const familyFeeSummary = children.reduce(
+      (totals, child) => ({
+        currentFee: totals.currentFee + child.feeSummary.currentFee,
+        previousDues: totals.previousDues + child.feeSummary.previousDues,
+        totalAmount: totals.totalAmount + child.feeSummary.totalAmount,
+        paidAmount: totals.paidAmount + child.feeSummary.paidAmount,
+        remainingAmount: totals.remainingAmount + child.feeSummary.remainingAmount,
+      }),
+      { currentFee: 0, previousDues: 0, totalAmount: 0, paidAmount: 0, remainingAmount: 0 }
+    );
+
+    return { ...parent.toObject(), children, familyFeeSummary };
+  });
 
   res.json({ success: true, data });
 });

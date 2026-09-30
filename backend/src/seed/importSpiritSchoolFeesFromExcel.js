@@ -403,7 +403,18 @@ async function run() {
       let createdStudents = 0;
       let updatedStudents = 0;
 
-      for (const item of parsed.students) {
+      // Process in small concurrent batches so MongoDB is not hit by thousands
+      // of strictly sequential round-trips. Each admission/payment key is unique,
+      // so batches are safe and dramatically faster on remote MongoDB.
+      const runBatches = async (items, batchSize, handler) => {
+        for (let i = 0; i < items.length; i += batchSize) {
+          const batch = items.slice(i, i + batchSize);
+          await Promise.all(batch.map(handler));
+          console.log(`Progress: ${Math.min(i + batch.length, items.length)}/${items.length}`);
+        }
+      };
+
+      await runBatches(parsed.students, 10, async (item) => {
         const existed = await Student.findOne({
           schoolId: school._id,
           admissionNumber: item.admissionNumber,
@@ -417,14 +428,14 @@ async function run() {
 
         if (existed) updatedStudents++;
         else createdStudents++;
-      }
+      });
 
       let invoicesCreated = 0;
       let paymentsPresent = 0;
 
-      for (const payment of parsed.payments) {
+      await runBatches(parsed.payments, 25, async (payment) => {
         const student = studentMap.get(payment.admissionNumber);
-        if (!student) continue;
+        if (!student) return;
 
         const billingKey =
           `excel-2026:${payment.feeType}:${payment.month}`;
@@ -451,7 +462,7 @@ async function run() {
 
           if (receipt) paymentsPresent++;
         }
-      }
+      });
 
       console.log('========================================');
       console.log('Spirit School Qaidabad Excel import complete');

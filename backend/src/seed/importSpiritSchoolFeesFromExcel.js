@@ -263,7 +263,7 @@ async function upsertStudent(item, school, session, classMap, admin) {
       academicSessionId: session._id,
       classId: schoolClass._id,
       sectionId: section._id,
-      rollNumber: item.rollNumber,
+      rollNumber: clean(item.rollNumber) || String(item.admissionNumber).replace(/\D/g, '') || '1',
       enrollmentDate: new Date('2026-01-01'),
       isCurrent: true,
       status: 'active',
@@ -273,7 +273,7 @@ async function upsertStudent(item, school, session, classMap, admin) {
     enrollment.academicSessionId = session._id;
     enrollment.classId = schoolClass._id;
     enrollment.sectionId = section._id;
-    enrollment.rollNumber = item.rollNumber;
+    enrollment.rollNumber = clean(item.rollNumber) || enrollment.rollNumber || String(item.admissionNumber).replace(/\D/g, '') || '1';
     enrollment.status = 'active';
     await enrollment.save();
   }

@@ -375,7 +375,19 @@ const getParentResults = asyncHandler(async (req, res) => {
     parentId: req.user._id,
     isActive: true,
     canViewAcademicData: true,
-  }).populate('studentId', 'fullName admissionNumber profileImage status');
+  }).populate({
+      path: 'studentId',
+      select: 'fullName admissionNumber fatherName profileImage status currentEnrollmentId',
+      populate: {
+        path: 'currentEnrollmentId',
+        select: 'rollNumber classId sectionId academicSessionId',
+        populate: [
+          { path: 'classId', select: 'name' },
+          { path: 'sectionId', select: 'name' },
+          { path: 'academicSessionId', select: 'name' },
+        ],
+      },
+    });
 
   const children = [];
   for (const link of links) {

@@ -131,6 +131,49 @@ const createTerm = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, message: 'Term created', data: term });
 });
 
+const updateTerm = asyncHandler(async (req, res) => {
+  const term = await findOwned(Term, req.params.id, req.user.schoolId, 'Term');
+  const academicSessionId = req.body.academicSessionId || term.academicSessionId;
+  const session = await findOwned(
+    AcademicSession,
+    academicSessionId,
+    req.user.schoolId,
+    'Academic session'
+  );
+  const updates = allowed(req.body, [
+    'academicSessionId',
+    'name',
+    'startDate',
+    'endDate',
+    'resultPublishDate',
+    'status',
+  ]);
+  const startDate = updates.startDate || term.startDate;
+  const endDate = updates.endDate || term.endDate;
+  validateDates(res, startDate, endDate);
+  if (new Date(startDate) < session.startDate || new Date(endDate) > session.endDate) {
+    res.status(400);
+    throw new Error('Term dates must be inside the academic session dates');
+  }
+  Object.assign(term, updates, { updatedBy: req.user._id });
+  await term.save();
+  res.json({ success: true, message: 'Term updated', data: term });
+});
+
+const deleteTerm = asyncHandler(async (req, res) => {
+  const term = await findOwned(Term, req.params.id, req.user.schoolId, 'Term');
+  const hasExaminations = await Examination.exists({
+    schoolId: req.user.schoolId,
+    termId: term._id,
+  });
+  if (hasExaminations) {
+    res.status(409);
+    throw new Error('Term is linked to examinations and cannot be deleted');
+  }
+  await term.deleteOne();
+  res.json({ success: true, message: 'Term deleted' });
+});
+
 const listTerms = asyncHandler(async (req, res) => {
   const query = { schoolId: req.user.schoolId };
   if (req.query.academicSessionId) query.academicSessionId = req.query.academicSessionId;
@@ -372,7 +415,7 @@ const deactivateTeacherAssignment = asyncHandler(async (req, res) => {
 
 module.exports = {
   createSession, listSessions, updateSession, deleteSession, setCurrentSession,
-  createTerm, listTerms,
+  createTerm, listTerms, updateTerm, deleteTerm,
   createClass, listClasses,
   createSection, listSections, updateSection, deleteSection,
   createSubject, listSubjects, updateSubject, deleteSubject,

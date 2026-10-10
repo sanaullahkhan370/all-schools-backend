@@ -369,6 +369,107 @@ const updateExamStatus = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Examination status updated', data });
 });
 
+const getAdminReportCards = asyncHandler(async (req, res) => {
+  const { examinationId, classId, sectionId } = req.query;
+  if (!examinationId || !classId || !sectionId) {
+    res.status(400);
+    throw new Error('Examination, Class and Section are required');
+  }
+
+  const exam = await Examination.findOne({
+    _id: examinationId,
+    schoolId: req.user.schoolId,
+  }).populate('academicSessionId', 'name').populate('termId', 'name');
+  if (!exam) {
+    res.status(404);
+    throw new Error('Examination not found');
+  }
+
+  const papers = await ExamSubject.find({
+    schoolId: req.user.schoolId,
+    examinationId: exam._id,
+    classId,
+    sectionId,
+  }).populate('subjectId', 'name').populate('classId', 'name').populate('sectionId', 'name').sort({ examDate: 1 });
+  if (papers.length === 0) {
+    res.json({ success: true, data: [] });
+    return;
+  }
+
+  const enrollments = await StudentEnrollment.find({
+    schoolId: req.user.schoolId,
+    classId,
+    sectionId,
+    isCurrent: true,
+    status: 'active',
+  }).populate('studentId', 'fullName fatherName admissionNumber profileImage');
+  const paperIds = papers.map((paper) => paper._id);
+  const marks = await ExamMark.find({
+    schoolId: req.user.schoolId,
+    examSubjectId: { $in: paperIds },
+  });
+  const markMap = new Map(marks.map((mark) => [
+    `${mark.examSubjectId.toString()}/${mark.studentId.toString()}`,
+    mark,
+  ]));
+
+  const data = enrollments.filter((enrollment) => enrollment.studentId).map((enrollment) => {
+    const student = enrollment.studentId;
+    const subjects = [];
+    let obtainedTotal = 0;
+    let maximumTotal = 0;
+    let allPassed = true;
+    for (const paper of papers) {
+      const mark = markMap.get(`${paper._id.toString()}/${student._id.toString()}`);
+      if (!mark) continue;
+      const attendanceStatus = mark.attendanceStatus || 'present';
+      const isPresent = attendanceStatus === 'present';
+      const obtainedMarks = isPresent ? Number(mark.obtainedMarks || 0) : null;
+      const passed = attendanceStatus === 'exempted' ||
+        (isPresent && obtainedMarks >= Number(paper.passingMarks));
+      subjects.push({
+        subject: paper.subjectId,
+        examDate: paper.examDate,
+        maximumMarks: paper.maximumMarks,
+        passingMarks: paper.passingMarks,
+        obtainedMarks,
+        attendanceStatus,
+        remarks: mark.remarks || '',
+        passed,
+      });
+      if (attendanceStatus !== 'exempted') {
+        maximumTotal += Number(paper.maximumMarks || 0);
+        obtainedTotal += obtainedMarks || 0;
+      }
+      if (!passed) allPassed = false;
+    }
+    const percentage = maximumTotal > 0
+      ? Number(((obtainedTotal / maximumTotal) * 100).toFixed(2))
+      : 0;
+    return {
+      student: {
+        _id: student._id,
+        fullName: student.fullName,
+        fatherName: student.fatherName,
+        admissionNumber: student.admissionNumber,
+        profileImage: student.profileImage,
+        rollNumber: enrollment.rollNumber,
+      },
+      result: {
+        examination: exam,
+        class: papers[0].classId,
+        section: papers[0].sectionId,
+        subjects,
+        obtainedTotal,
+        maximumTotal,
+        percentage,
+        result: allPassed && subjects.length > 0 ? 'pass' : 'fail',
+      },
+    };
+  });
+  res.json({ success: true, data });
+});
+
 const getParentResults = asyncHandler(async (req, res) => {
   const links = await ParentStudent.find({
     schoolId: req.user.schoolId,
@@ -525,6 +626,7 @@ module.exports = {
   deleteExam,
   updateExamStatus,
   getParentResults,
+  getAdminReportCards,
   listAnswerSheets,
   allocateAnswerSheet,
   allocateAnswerSheetManually,

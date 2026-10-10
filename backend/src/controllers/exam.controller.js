@@ -419,14 +419,18 @@ const getAdminReportCards = asyncHandler(async (req, res) => {
     let obtainedTotal = 0;
     let maximumTotal = 0;
     let allPassed = true;
+    let completedSubjects = 0;
     for (const paper of papers) {
       const mark = markMap.get(`${paper._id.toString()}/${student._id.toString()}`);
-      if (!mark) continue;
-      const attendanceStatus = mark.attendanceStatus || 'present';
+      const attendanceStatus = mark
+        ? (mark.attendanceStatus || 'present')
+        : 'notEntered';
       const isPresent = attendanceStatus === 'present';
-      const obtainedMarks = isPresent ? Number(mark.obtainedMarks || 0) : null;
+      const obtainedMarks = mark && isPresent
+        ? Number(mark.obtainedMarks || 0)
+        : null;
       const passed = attendanceStatus === 'exempted' ||
-        (isPresent && obtainedMarks >= Number(paper.passingMarks));
+        (mark && isPresent && obtainedMarks >= Number(paper.passingMarks));
       subjects.push({
         subject: paper.subjectId,
         examDate: paper.examDate,
@@ -434,18 +438,24 @@ const getAdminReportCards = asyncHandler(async (req, res) => {
         passingMarks: paper.passingMarks,
         obtainedMarks,
         attendanceStatus,
-        remarks: mark.remarks || '',
+        remarks: mark?.remarks || '',
         passed,
       });
+      if (attendanceStatus !== 'notEntered') {
+        completedSubjects += 1;
+        if (attendanceStatus !== 'exempted') {
+          obtainedTotal += obtainedMarks || 0;
+        }
+        if (!passed) allPassed = false;
+      }
       if (attendanceStatus !== 'exempted') {
         maximumTotal += Number(paper.maximumMarks || 0);
-        obtainedTotal += obtainedMarks || 0;
       }
-      if (!passed) allPassed = false;
     }
-    const percentage = maximumTotal > 0
+    const isComplete = completedSubjects === papers.length;
+    const percentage = isComplete && maximumTotal > 0
       ? Number(((obtainedTotal / maximumTotal) * 100).toFixed(2))
-      : 0;
+      : null;
     return {
       student: {
         _id: student._id,
@@ -463,7 +473,7 @@ const getAdminReportCards = asyncHandler(async (req, res) => {
         obtainedTotal,
         maximumTotal,
         percentage,
-        result: allPassed && subjects.length > 0 ? 'pass' : 'fail',
+        result: !isComplete ? 'pending' : (allPassed ? 'pass' : 'fail'),
       },
     };
   });

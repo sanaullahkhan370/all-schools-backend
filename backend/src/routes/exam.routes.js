@@ -6,6 +6,7 @@ const router = express.Router();
 router.use(protect);
 router.route('/').get(authorize('admin'), controller.listExams).post(authorize('admin'), controller.createExam);
 router.get('/parent/results', authorize('parent'), controller.getParentResults);
+router.get('/admin/report-cards', authorize('admin'), controller.getAdminReportCards);
 router.route('/:id')
   .patch(authorize('admin'), controller.updateExam)
   .delete(authorize('admin'), controller.deleteExam);

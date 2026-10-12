@@ -23,6 +23,9 @@ const starRoutes = require('./routes/star.routes');
 
 const app = express();
 
+// Render is behind one trusted proxy; configure this before rate limiting.
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet()); // HTTP headers security ke liye
 app.use(cors()); // Cross-Origin Resource Sharing allow karne ke liye

@@ -45,6 +45,35 @@ const createExamSubject = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, message: 'Exam Subject added', data });
 });
 
+const updateExamSubject = asyncHandler(async (req, res) => {
+  const paper = await ExamSubject.findOne({
+    _id: req.params.examSubjectId,
+    schoolId: req.user.schoolId,
+  });
+  if (!paper) {
+    res.status(404);
+    throw new Error('Exam subject not found');
+  }
+  if (paper.isLocked) {
+    res.status(400);
+    throw new Error('This exam paper is locked');
+  }
+
+  const maximumMarks = Number(req.body.maximumMarks);
+  const passingMarks = Number(req.body.passingMarks);
+  if (!Number.isFinite(maximumMarks) || maximumMarks < 1 ||
+      !Number.isFinite(passingMarks) || passingMarks < 0 ||
+      passingMarks > maximumMarks) {
+    res.status(400);
+    throw new Error('Maximum marks must be at least 1 and passing marks must be between 0 and maximum marks');
+  }
+
+  paper.maximumMarks = maximumMarks;
+  paper.passingMarks = passingMarks;
+  await paper.save();
+  res.json({ success: true, message: 'Exam marks settings updated', data: paper });
+});
+
 const generateExamSubjects = asyncHandler(async (req, res) => {
   const required = ['examinationId', 'classId', 'sectionId', 'examDate'];
   if (required.some((field) => !req.body[field])) {
@@ -628,6 +657,7 @@ module.exports = {
   createExam,
   listExams,
   createExamSubject,
+  updateExamSubject,
   generateExamSubjects,
   listExamSubjects,
   getMarkSheet,

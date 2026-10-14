@@ -420,6 +420,20 @@ const getAdminReportCards = asyncHandler(async (req, res) => {
     classId,
     sectionId,
   }).populate('subjectId', 'name').populate('classId', 'name').populate('sectionId', 'name').sort({ examDate: 1 });
+  if (req.user.role === 'teacher') {
+    const hasAssignment = await ExamSubject.exists({
+      schoolId: req.user.schoolId,
+      examinationId: exam._id,
+      classId,
+      sectionId,
+      assignedTeacherId: req.user._id,
+    });
+    if (!hasAssignment) {
+      res.status(403);
+      throw new Error('You are not assigned to this class and examination');
+    }
+  }
+
   if (papers.length === 0) {
     res.json({ success: true, data: [] });
     return;

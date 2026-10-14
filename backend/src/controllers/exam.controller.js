@@ -369,15 +369,32 @@ const deleteExam = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Examination not found');
   }
-  if (await ExamSubject.exists({
+  const papers = await ExamSubject.find({
     schoolId: req.user.schoolId,
     examinationId: exam._id,
-  })) {
-    res.status(409);
-    throw new Error('Examination has subject papers and cannot be deleted');
+  }).select('_id');
+  const paperIds = papers.map((paper) => paper._id);
+
+  // Remove records tied to this exam before removing its subject papers.
+  if (paperIds.length > 0) {
+    await ExamMark.deleteMany({
+      schoolId: req.user.schoolId,
+      examSubjectId: { $in: paperIds },
+    });
+    await ExamAnswerSheet.deleteMany({
+      schoolId: req.user.schoolId,
+      examSubjectId: { $in: paperIds },
+    });
+    await ExamSubject.deleteMany({
+      schoolId: req.user.schoolId,
+      examinationId: exam._id,
+    });
   }
   await exam.deleteOne();
-  res.json({ success: true, message: 'Examination deleted' });
+  res.json({
+    success: true,
+    message: 'Examination and its subject papers, marks, and answer sheets deleted',
+  });
 });
 
 const updateExamStatus = asyncHandler(async (req, res) => {

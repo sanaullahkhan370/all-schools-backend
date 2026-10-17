@@ -3,6 +3,7 @@ const Examination = require('../models/examination.model');
 const AcademicSession = require('../models/academicSession.model');
 const Term = require('../models/term.model');
 const ExamSubject = require('../models/examSubject.model');
+const SchoolClass = require('../models/class.model');
 const TeacherAssignment = require('../models/teacherAssignment.model');
 const ExamMark = require('../models/examMark.model');
 const StudentEnrollment = require('../models/studentEnrollment.model');
@@ -81,14 +82,8 @@ const generateExamSubjects = asyncHandler(async (req, res) => {
     throw new Error('Examination, Class, Section and Exam Date are required');
   }
 
-  const maximumMarks = Number(req.body.maximumMarks ?? 100);
+  const requestedMaximumMarks = Number(req.body.maximumMarks ?? 100);
   const passingMarks = Number(req.body.passingMarks ?? 40);
-  if (!Number.isFinite(maximumMarks) || maximumMarks < 1 ||
-      !Number.isFinite(passingMarks) || passingMarks < 0 ||
-      passingMarks > maximumMarks) {
-    res.status(400);
-    throw new Error('Valid maximum and passing marks are required');
-  }
 
   const exam = await Examination.findOne({
     _id: req.body.examinationId,
@@ -97,6 +92,26 @@ const generateExamSubjects = asyncHandler(async (req, res) => {
   if (!exam) {
     res.status(404);
     throw new Error('Examination not found');
+  }
+
+  const schoolClass = await SchoolClass.findOne({
+    _id: req.body.classId,
+    schoolId: req.user.schoolId,
+  }).select('name');
+  if (!schoolClass) {
+    res.status(404);
+    throw new Error('Class not found');
+  }
+
+  const normalizedClassName = schoolClass.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const isPrimaryClass = /^(pg|playgroup|prep|preparatory|nursery|class(one|1|first|1st|two|2|second|2nd|three|3|third|3rd|four|4|fourth|4th|five|5|fifth|5th)|one|1st?|first|two|2nd|second|three|3rd|third|four|4th|fourth|five|5th|fifth)$/.test(normalizedClassName);
+  const maximumMarks = isPrimaryClass ? 100 : requestedMaximumMarks;
+
+  if (!Number.isFinite(maximumMarks) || maximumMarks < 1 ||
+      !Number.isFinite(passingMarks) || passingMarks < 0 ||
+      passingMarks > maximumMarks) {
+    res.status(400);
+    throw new Error('Valid maximum and passing marks are required');
   }
 
   const examDate = new Date(req.body.examDate);
@@ -122,44 +137,49 @@ const generateExamSubjects = asyncHandler(async (req, res) => {
 
   const seenSubjects = new Set();
   let createdCount = 0;
+  let updatedCount = 0;
   let skippedCount = 0;
   for (const assignment of assignments) {
     const subjectKey = assignment.subjectId.toString();
     if (seenSubjects.has(subjectKey)) continue;
     seenSubjects.add(subjectKey);
 
-    const result = await ExamSubject.updateOne(
-      {
-        schoolId: req.user.schoolId,
-        examinationId: exam._id,
-        classId: req.body.classId,
-        sectionId: req.body.sectionId,
-        subjectId: assignment.subjectId,
-      },
-      {
-        $setOnInsert: {
-          schoolId: req.user.schoolId,
-          examinationId: exam._id,
-          classId: req.body.classId,
-          sectionId: req.body.sectionId,
-          subjectId: assignment.subjectId,
-          assignedTeacherId: assignment.teacherId,
-          examDate,
-          maximumMarks,
-          passingMarks,
-          createdBy: req.user._id,
-        },
-      },
-      { upsert: true, runValidators: true }
-    );
-    if (result.upsertedCount > 0) createdCount += 1;
-    else skippedCount += 1;
-  }
+    const paperQuery = {
+      schoolId: req.user.schoolId,
+      examinationId: exam._id,
+      classId: req.body.classId,
+      sectionId: req.body.sectionId,
+      subjectId: assignment.subjectId,
+    };
+    const existingPaper = await ExamSubject.findOne(paperQuery);
 
+    if (existingPaper) {
+      // For PG through Class 5, regenerating the subject list also fixes
+      // existing unlocked papers to 100 maximum marks. Locked papers stay unchanged.
+      if (isPrimaryClass && !existingPaper.isLocked && existingPaper.maximumMarks !== 100) {
+        existingPaper.maximumMarks = 100;
+        await existingPaper.save();
+        updatedCount += 1;
+      } else {
+        skippedCount += 1;
+      }
+      continue;
+    }
+
+    await ExamSubject.create({
+      ...paperQuery,
+      assignedTeacherId: assignment.teacherId,
+      examDate,
+      maximumMarks,
+      passingMarks,
+      createdBy: req.user._id,
+    });
+    createdCount += 1;
+  }
   res.status(201).json({
     success: true,
-    message: `${createdCount} Subject papers generated; ${skippedCount} existing papers skipped`,
-    data: { createdCount, skippedCount },
+    message: `${createdCount} Subject papers generated; ${updatedCount} existing papers updated; ${skippedCount} papers skipped`,
+    data: { createdCount, updatedCount, skippedCount },
   });
 });
 
